@@ -32,8 +32,8 @@ export class RpcProxy {
     return headers;
   }
 
-  private async decode(response: Response): Promise<any> {
-    let payload: any;
+  private async decode<T>(response: Response): Promise<T> {
+    let payload: unknown;
     try {
       payload = await response.json();
     } catch (err) {
@@ -44,106 +44,129 @@ export class RpcProxy {
     }
 
     if (response.ok) {
-      return payload;
+      return payload as T;
     }
 
     let message = 'unknown error';
     if (payload && typeof payload === 'object') {
-      message = payload.error ?? payload.message ?? JSON.stringify(payload, (_k, v) => v);
+      const record = payload as Record<string, unknown>;
+      const error = record.error;
+      const msg = record.message;
+      message =
+        (typeof error === 'string' && error) ||
+        (typeof msg === 'string' && msg) ||
+        JSON.stringify(record, (_k, v) => v);
     } else if (typeof payload === 'string' && payload.trim()) {
       message = payload.trim();
     }
     throw new RpcError(`${response.status}: ${message}`);
   }
 
-  private async get(path: string): Promise<any> {
+  private async get<T>(path: string): Promise<T> {
     const resp = await this.fetchFn(`${this.baseUrl}${path}`, {
       headers: this.headers(),
       method: 'GET',
     });
-    return this.decode(resp);
+    return this.decode<T>(resp);
   }
 
-  private async post(path: string, body: any): Promise<any> {
+  private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
     const resp = await this.fetchFn(`${this.baseUrl}${path}`, {
       headers: { 'content-type': 'application/json', ...this.headers() },
       method: 'POST',
       body: JSON.stringify(body),
     });
-    return this.decode(resp);
+    return this.decode<T>(resp);
   }
 
   async getPublicParams(): Promise<CorePublicParameters> {
-    const data = await this.get('/core/public-params');
+    const data = await this.get<Record<string, unknown>>('/core/public-params');
     return CorePublicParameters.fromRpc(data);
   }
 
-  async issueGuarantee(body: Record<string, any>): Promise<any> {
-    return this.post('/core/guarantees', body);
+  async issueGuarantee(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.post<Record<string, unknown>>('/core/guarantees', body);
   }
 
-  async createPaymentTab(body: Record<string, any>): Promise<any> {
-    return this.post('/core/payment-tabs', body);
+  async createPaymentTab(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.post<Record<string, unknown>>('/core/payment-tabs', body);
   }
 
-  async listSettledTabs(recipientAddress: string): Promise<any[]> {
-    return this.get(`/core/recipients/${recipientAddress}/settled-tabs`);
+  async listSettledTabs(recipientAddress: string): Promise<Record<string, unknown>[]> {
+    return this.get<Record<string, unknown>[]>(`/core/recipients/${recipientAddress}/settled-tabs`);
   }
 
-  async listPendingRemunerations(recipientAddress: string): Promise<any[]> {
-    return this.get(`/core/recipients/${recipientAddress}/pending-remunerations`);
+  async listPendingRemunerations(recipientAddress: string): Promise<Record<string, unknown>[]> {
+    return this.get<Record<string, unknown>[]>(
+      `/core/recipients/${recipientAddress}/pending-remunerations`
+    );
   }
 
-  async getTab(tabId: number | bigint): Promise<any> {
-    return this.get(`/core/tabs/${serializeTabId(tabId)}`);
+  async getTab(tabId: number | bigint): Promise<Record<string, unknown>> {
+    return this.get<Record<string, unknown>>(`/core/tabs/${serializeTabId(tabId)}`);
   }
 
-  async listRecipientTabs(recipientAddress: string, settlementStatuses?: string[]): Promise<any[]> {
+  async listRecipientTabs(
+    recipientAddress: string,
+    settlementStatuses?: string[]
+  ): Promise<Record<string, unknown>[]> {
     let query = '';
     if (settlementStatuses?.length) {
       query =
         '?' + settlementStatuses.map((s) => `settlementStatus=${encodeURIComponent(s)}`).join('&');
     }
-    return this.get(`/core/recipients/${recipientAddress}/tabs${query}`);
+    return this.get<Record<string, unknown>[]>(`/core/recipients/${recipientAddress}/tabs${query}`);
   }
 
-  async getTabGuarantees(tabId: number | bigint): Promise<any[]> {
-    return this.get(`/core/tabs/${serializeTabId(tabId)}/guarantees`);
+  async getTabGuarantees(tabId: number | bigint): Promise<Record<string, unknown>[]> {
+    return this.get<Record<string, unknown>[]>(`/core/tabs/${serializeTabId(tabId)}/guarantees`);
   }
 
-  async getLatestGuarantee(tabId: number | bigint): Promise<any> {
-    return this.get(`/core/tabs/${serializeTabId(tabId)}/guarantees/latest`);
+  async getLatestGuarantee(tabId: number | bigint): Promise<Record<string, unknown>> {
+    return this.get<Record<string, unknown>>(
+      `/core/tabs/${serializeTabId(tabId)}/guarantees/latest`
+    );
   }
 
-  async getGuarantee(tabId: number | bigint, reqId: number | bigint): Promise<any> {
-    return this.get(`/core/tabs/${serializeTabId(tabId)}/guarantees/${reqId}`);
+  async getGuarantee(
+    tabId: number | bigint,
+    reqId: number | bigint
+  ): Promise<Record<string, unknown>> {
+    return this.get<Record<string, unknown>>(
+      `/core/tabs/${serializeTabId(tabId)}/guarantees/${reqId}`
+    );
   }
 
-  async listRecipientPayments(recipientAddress: string): Promise<any[]> {
-    return this.get(`/core/recipients/${recipientAddress}/payments`);
+  async listRecipientPayments(recipientAddress: string): Promise<Record<string, unknown>[]> {
+    return this.get<Record<string, unknown>[]>(`/core/recipients/${recipientAddress}/payments`);
   }
 
-  async getCollateralEventsForTab(tabId: number | bigint): Promise<any[]> {
-    return this.get(`/core/tabs/${serializeTabId(tabId)}/collateral-events`);
+  async getCollateralEventsForTab(tabId: number | bigint): Promise<Record<string, unknown>[]> {
+    return this.get<Record<string, unknown>[]>(
+      `/core/tabs/${serializeTabId(tabId)}/collateral-events`
+    );
   }
 
-  async getUserAssetBalance(userAddress: string, assetAddress: string): Promise<any> {
-    return this.get(`/core/users/${userAddress}/assets/${assetAddress}`);
+  async getUserAssetBalance(
+    userAddress: string,
+    assetAddress: string
+  ): Promise<Record<string, unknown>> {
+    return this.get<Record<string, unknown>>(`/core/users/${userAddress}/assets/${assetAddress}`);
   }
 
-  async updateUserSuspension(userAddress: string, suspended: boolean): Promise<any> {
+  async updateUserSuspension(userAddress: string, suspended: boolean): Promise<unknown> {
     return this.post(`/core/users/${userAddress}/suspension`, { suspended });
   }
 
-  async createAdminApiKey(body: Record<string, any>): Promise<any> {
-    return this.post('/core/admin/api-keys', body);
+  async createAdminApiKey(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.post<Record<string, unknown>>('/core/admin/api-keys', body);
   }
 
-  async listAdminApiKeys(): Promise<any[]> {
-    return this.get('/core/admin/api-keys');
+  async listAdminApiKeys(): Promise<Record<string, unknown>[]> {
+    return this.get<Record<string, unknown>[]>('/core/admin/api-keys');
   }
 
-  async revokeAdminApiKey(keyId: string): Promise<any> {
+  async revokeAdminApiKey(keyId: string): Promise<unknown> {
     return this.post(`/core/admin/api-keys/${keyId}/revoke`, {});
   }
 }

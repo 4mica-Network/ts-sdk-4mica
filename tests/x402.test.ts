@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PaymentSignature, SigningScheme } from '../src/models';
 import { PaymentRequirements, TabResponse, X402Flow } from '../src/x402';
+import type { FetchFn } from '../src/rpc';
 import { X402Error } from '../src/errors';
 
 class StubSigner {
@@ -82,7 +83,7 @@ describe('X402Flow', () => {
       return new Response('not found', { status: 404 });
     };
 
-    const flow = new X402Flow(new StubSigner(), fetch as any);
+    const flow = new X402Flow(new StubSigner(), fetch as FetchFn);
     const payment = await flow.signPayment(requirements, userAddress);
     expect(payment.claims.tabId).toBe(0x1234n);
 

@@ -22,11 +22,22 @@ import { RpcProxy } from './rpc';
 import { CorePublicParameters, PaymentSigner } from './signing';
 import { normalizeAddress, parseU256, serializeU256 } from './utils';
 
-function tabStatusFromRpc(status: any): TabPaymentStatus {
+const isNumericLike = (value: unknown): value is number | bigint | string =>
+  typeof value === 'number' || typeof value === 'bigint' || typeof value === 'string';
+
+type RpcTabStatus = {
+  paid?: number | bigint | string;
+  paidAmount?: number | bigint | string;
+  remunerated?: boolean;
+  paidOut?: boolean;
+  asset?: string;
+  assetAddress?: string;
+};
+
+function tabStatusFromRpc(status: RpcTabStatus): TabPaymentStatus {
   const paid = status.paid !== undefined ? status.paid : (status.paidAmount ?? 0);
-  const remunerated =
-    status.remunerated !== undefined ? status.remunerated : (status.paidOut ?? false);
-  const asset = status.asset ?? status.assetAddress;
+  const remunerated = status.remunerated ?? status.paidOut ?? false;
+  const asset = status.asset ?? status.assetAddress ?? '';
   return {
     paid: parseU256(paid),
     remunerated: Boolean(remunerated),
@@ -87,8 +98,9 @@ export class Client {
           `chain id mismatch between core (${expectedChainId}) and provider (${chainId})`
         );
       }
-    } catch (err: any) {
-      throw new ClientInitializationError(err?.message ?? String(err));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new ClientInitializationError(message);
     }
   }
 
@@ -194,7 +206,10 @@ export class RecipientClient {
       ttl: ttl ?? null,
     };
     const result = await this.client.rpc.createPaymentTab(body);
-    return parseU256(result.id ?? result.tabId ?? result.tab_id);
+    const record = result as Record<string, unknown>;
+    const tabIdRaw = record.id ?? record.tabId ?? record.tab_id;
+    const tabId = isNumericLike(tabIdRaw) ? tabIdRaw : 0;
+    return parseU256(tabId);
   }
 
   async getTabPaymentStatus(tabId: number | bigint): Promise<TabPaymentStatus> {
@@ -222,7 +237,10 @@ export class RecipientClient {
       scheme,
     };
     const cert = await this.client.rpc.issueGuarantee(payload);
-    return { claims: cert.claims, signature: cert.signature };
+    const record = cert as Record<string, unknown>;
+    const certClaims = typeof record.claims === 'string' ? record.claims : '';
+    const signatureOut = typeof record.signature === 'string' ? record.signature : '';
+    return { claims: certClaims, signature: signatureOut };
   }
 
   verifyPaymentGuarantee(cert: BLSCert): PaymentGuaranteeClaims {

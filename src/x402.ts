@@ -3,17 +3,20 @@ import { normalizeAddress, parseU256 } from './utils';
 import { X402Error } from './errors';
 import type { FetchFn } from './rpc';
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
 export interface PaymentRequirementsInit {
   scheme: string;
   network: string;
   maxAmountRequired: string;
   payTo: string;
   asset: string;
-  extra?: Record<string, any>;
+  extra?: Record<string, unknown>;
   resource?: string;
   description?: string;
   mimeType?: string;
-  outputSchema?: any;
+  outputSchema?: unknown;
   maxTimeoutSeconds?: number;
 }
 
@@ -24,18 +27,19 @@ export class PaymentRequirements {
     public maxAmountRequired: string,
     public payTo: string,
     public asset: string,
-    public extra: Record<string, any>,
+    public extra: Record<string, unknown>,
     public resource?: string,
     public description?: string,
     public mimeType?: string,
-    public outputSchema?: any,
+    public outputSchema?: unknown,
     public maxTimeoutSeconds?: number
   ) {}
 
-  static fromRaw(raw: Record<string, any>): PaymentRequirements {
-    const pick = (keys: string[], defaultValue?: any) => {
+  static fromRaw(raw: Record<string, unknown>): PaymentRequirements {
+    const pick = <T>(keys: string[], defaultValue?: T) => {
       for (const key of keys) {
-        if (raw[key] !== undefined && raw[key] !== null) return raw[key];
+        const value = raw[key];
+        if (value !== undefined && value !== null) return value as T;
       }
       return defaultValue;
     };
@@ -43,8 +47,8 @@ export class PaymentRequirements {
     const amount = pick(['maxAmountRequired', 'max_amount_required']);
     const payTo = pick(['payTo', 'pay_to']);
     const asset = pick(['asset', 'assetAddress', 'asset_address']);
-    const scheme = pick(['scheme']);
-    const network = pick(['network']);
+    const scheme = pick<unknown>(['scheme']);
+    const network = pick<unknown>(['network']);
     if (!amount || !payTo || !asset || !scheme || !network) {
       const missing = [
         ['scheme', scheme],
@@ -60,11 +64,11 @@ export class PaymentRequirements {
     }
 
     return new PaymentRequirements(
-      scheme,
-      network,
+      String(scheme),
+      String(network),
       String(amount),
-      payTo,
-      asset,
+      String(payTo),
+      String(asset),
       pick(['extra'], {}) ?? {},
       pick(['resource']),
       pick(['description']),
@@ -74,13 +78,13 @@ export class PaymentRequirements {
     );
   }
 
-  toPayload(): Record<string, any> {
-    const extraPayload = { ...(this.extra ?? {}) };
+  toPayload(): Record<string, unknown> {
+    const extraPayload: Record<string, unknown> = { ...(this.extra ?? {}) };
     if ('tab_endpoint' in extraPayload && !('tabEndpoint' in extraPayload)) {
       extraPayload['tabEndpoint'] = extraPayload['tab_endpoint'];
       delete extraPayload['tab_endpoint'];
     }
-    const payload: Record<string, any> = {
+    const payload: Record<string, unknown> = {
       scheme: this.scheme,
       network: this.network,
       maxAmountRequired: this.maxAmountRequired,
@@ -100,8 +104,16 @@ export class PaymentRequirements {
 export class PaymentRequirementsExtra {
   constructor(public tabEndpoint?: string | null) {}
 
-  static fromRaw(raw: Record<string, any> | undefined): PaymentRequirementsExtra {
-    const tabEndpoint = raw?.tabEndpoint ?? raw?.tab_endpoint;
+  static fromRaw(raw: Record<string, unknown> | undefined): PaymentRequirementsExtra {
+    const tabEndpointRaw =
+      (isRecord(raw) ? raw.tabEndpoint : undefined) ??
+      (isRecord(raw) ? raw.tab_endpoint : undefined);
+    const tabEndpoint =
+      typeof tabEndpointRaw === 'string'
+        ? tabEndpointRaw
+        : tabEndpointRaw === null
+          ? null
+          : undefined;
     return new PaymentRequirementsExtra(tabEndpoint);
   }
 }
@@ -118,10 +130,10 @@ export class X402PaymentEnvelope {
     public x402Version: number,
     public scheme: string,
     public network: string,
-    public payload: Record<string, any>
+    public payload: Record<string, unknown>
   ) {}
 
-  toPayload(): Record<string, any> {
+  toPayload(): Record<string, unknown> {
     return {
       x402Version: this.x402Version,
       scheme: this.scheme,
@@ -142,7 +154,7 @@ export class X402SignedPayment {
 export class X402SettledPayment {
   constructor(
     public payment: X402SignedPayment,
-    public settlement: any
+    public settlement: unknown
   ) {}
 }
 

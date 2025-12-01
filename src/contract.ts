@@ -1,10 +1,18 @@
-import { Contract, JsonRpcProvider, Wallet, getBytes, hexlify, toBeHex } from 'ethers';
+import {
+  Contract,
+  InterfaceAbi,
+  JsonRpcProvider,
+  Wallet,
+  getBytes,
+  hexlify,
+  toBeHex,
+} from 'ethers';
 import core4micaAbi from './abi/core4mica.json';
 import erc20Abi from './abi/erc20.json';
 import { ContractError } from './errors';
 import { parseU256 } from './utils';
 
-type ContractFactory = (address: string, abi: any, signer: Wallet) => Contract;
+type ContractFactory = (address: string, abi: unknown, signer: Wallet) => Contract;
 
 export class ContractGateway {
   readonly provider: JsonRpcProvider;
@@ -28,7 +36,11 @@ export class ContractGateway {
     this.provider = provider ?? new JsonRpcProvider(ethRpcUrl, networkish);
     this.wallet = new Wallet(privateKey, this.provider);
     const factory: ContractFactory =
-      contractFactory ?? ((addr, abi, signer) => new Contract(addr, abi.abi ?? abi, signer));
+      contractFactory ??
+      ((addr, abi, signer) => {
+        const resolvedAbi = (abi as { abi?: InterfaceAbi }).abi ?? (abi as InterfaceAbi);
+        return new Contract(addr, resolvedAbi as InterfaceAbi, signer);
+      });
     this.contract = factory(contractAddress, core4micaAbi, this.wallet);
   }
 
@@ -45,15 +57,16 @@ export class ContractGateway {
     return this.erc20Cache.get(checksum)!;
   }
 
-  private async send<T>(promise: Promise<any>): Promise<T> {
+  private async send<T>(promise: Promise<unknown>): Promise<T> {
     try {
       const tx = await promise;
-      if (tx.wait) {
-        return (await tx.wait()) as T;
+      if (typeof (tx as { wait?: unknown }).wait === 'function') {
+        return await (tx as { wait: () => Promise<T> }).wait();
       }
       return tx as T;
-    } catch (err: any) {
-      throw new ContractError(err?.message ?? String(err));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new ContractError(message);
     }
   }
 
@@ -61,13 +74,14 @@ export class ContractGateway {
     return this.send<string>(this.contract.guaranteeDomainSeparator());
   }
 
-  async approveErc20(token: string, amount: number | bigint | string): Promise<any> {
+  async approveErc20(token: string, amount: number | bigint | string): Promise<unknown> {
     const erc20 = this.erc20(token);
-    const target = (this.contract as any).target ?? (this.contract as any).address;
-    return this.send(erc20.approve(target, parseU256(amount)));
+    const { target, address } = this.contract as { target?: string; address?: string };
+    const spender = target ?? address ?? token;
+    return this.send(erc20.approve(spender, parseU256(amount)));
   }
 
-  async deposit(amount: number | bigint | string, erc20Token?: string): Promise<any> {
+  async deposit(amount: number | bigint | string, erc20Token?: string): Promise<unknown> {
     if (erc20Token) {
       return this.send(this.contract.depositStablecoin(erc20Token, parseU256(amount)));
     }
@@ -88,14 +102,19 @@ export class ContractGateway {
   > {
     try {
       const result = await this.contract.getUserAllAssets(this.wallet.address);
-      return result.map((asset: any) => ({
+      return (
+        result as Array<
+          [string, number | bigint | string, number | bigint | string, number | bigint | string]
+        >
+      ).map((asset) => ({
         asset: asset[0],
         collateral: parseU256(asset[1]),
         withdrawal_request_timestamp: parseU256(asset[2]),
         withdrawal_request_amount: parseU256(asset[3]),
       }));
-    } catch (err: any) {
-      throw new ContractError(err?.message ?? String(err));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new ContractError(message);
     }
   }
 
@@ -111,8 +130,9 @@ export class ContractGateway {
         remunerated: Boolean(remunerated),
         asset,
       };
-    } catch (err: any) {
-      throw new ContractError(err?.message ?? String(err));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new ContractError(message);
     }
   }
 
@@ -121,7 +141,7 @@ export class ContractGateway {
     reqId: number | bigint,
     amount: number | bigint | string,
     recipient: string
-  ): Promise<any> {
+  ): Promise<unknown> {
     const data = Buffer.from(
       `tab_id:${toBeHex(parseU256(tabId))};req_id:${toBeHex(parseU256(reqId))}`
     );
@@ -138,34 +158,34 @@ export class ContractGateway {
     amount: number | bigint | string,
     erc20Token: string,
     recipient: string
-  ): Promise<any> {
+  ): Promise<unknown> {
     return this.send(
       this.contract.payTabInERC20Token(parseU256(tabId), erc20Token, parseU256(amount), recipient)
     );
   }
 
-  async requestWithdrawal(amount: number | bigint | string, erc20Token?: string): Promise<any> {
+  async requestWithdrawal(amount: number | bigint | string, erc20Token?: string): Promise<unknown> {
     if (erc20Token) {
       return this.send(this.contract.requestWithdrawal(erc20Token, parseU256(amount)));
     }
     return this.send(this.contract.requestWithdrawal(parseU256(amount)));
   }
 
-  async cancelWithdrawal(erc20Token?: string): Promise<any> {
+  async cancelWithdrawal(erc20Token?: string): Promise<unknown> {
     if (erc20Token) {
       return this.send(this.contract.cancelWithdrawal(erc20Token));
     }
     return this.send(this.contract.cancelWithdrawal());
   }
 
-  async finalizeWithdrawal(erc20Token?: string): Promise<any> {
+  async finalizeWithdrawal(erc20Token?: string): Promise<unknown> {
     if (erc20Token) {
       return this.send(this.contract.finalizeWithdrawal(erc20Token));
     }
     return this.send(this.contract.finalizeWithdrawal());
   }
 
-  async remunerate(claimsBlob: Uint8Array, signatureWords: Uint8Array[]): Promise<any> {
+  async remunerate(claimsBlob: Uint8Array, signatureWords: Uint8Array[]): Promise<unknown> {
     const sigStruct = signatureWords.map((word) => hexlify(getBytes(word)));
     return this.send(this.contract.remunerate(hexlify(claimsBlob), sigStruct));
   }

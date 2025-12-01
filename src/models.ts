@@ -85,7 +85,7 @@ export interface UserInfo {
   withdrawalRequestTimestamp: number;
 }
 
-function getAny<T>(raw: Record<string, any>, ...keys: string[]): T | undefined {
+function getAny<T>(raw: Record<string, unknown>, ...keys: string[]): T | undefined {
   for (const key of keys) {
     if (key in raw) return raw[key] as T;
   }
@@ -106,16 +106,16 @@ export class TabInfo {
     public updatedAt: number
   ) {}
 
-  static fromRpc(raw: Record<string, any>): TabInfo {
+  static fromRpc(raw: Record<string, unknown>): TabInfo {
     return new TabInfo(
-      parseU256(getAny(raw, 'tab_id', 'tabId') ?? 0),
-      getAny(raw, 'user_address', 'userAddress') ?? '',
-      getAny(raw, 'recipient_address', 'recipientAddress') ?? '',
-      getAny(raw, 'asset_address', 'assetAddress') ?? '',
+      parseU256((getAny(raw, 'tab_id', 'tabId') ?? 0) as number | bigint | string),
+      (getAny(raw, 'user_address', 'userAddress') ?? '') as string,
+      (getAny(raw, 'recipient_address', 'recipientAddress') ?? '') as string,
+      (getAny(raw, 'asset_address', 'assetAddress') ?? '') as string,
       Number(getAny(raw, 'start_timestamp', 'startTimestamp')),
       Number(getAny(raw, 'ttl_seconds', 'ttlSeconds')),
-      getAny(raw, 'status') ?? '',
-      getAny(raw, 'settlement_status', 'settlementStatus') ?? '',
+      (getAny(raw, 'status') ?? '') as string,
+      (getAny(raw, 'settlement_status', 'settlementStatus') ?? '') as string,
       Number(getAny(raw, 'created_at', 'createdAt')),
       Number(getAny(raw, 'updated_at', 'updatedAt'))
     );
@@ -134,14 +134,14 @@ export class GuaranteeInfo {
     public certificate?: string | null
   ) {}
 
-  static fromRpc(raw: Record<string, any>): GuaranteeInfo {
+  static fromRpc(raw: Record<string, unknown>): GuaranteeInfo {
     return new GuaranteeInfo(
-      parseU256(getAny(raw, 'tab_id', 'tabId') ?? 0),
-      parseU256(getAny(raw, 'req_id', 'reqId') ?? 0),
-      getAny(raw, 'from_address', 'fromAddress') ?? '',
-      getAny(raw, 'to_address', 'toAddress') ?? '',
-      getAny(raw, 'asset_address', 'assetAddress') ?? '',
-      parseU256(getAny(raw, 'amount') ?? 0),
+      parseU256((getAny(raw, 'tab_id', 'tabId') ?? 0) as number | bigint | string),
+      parseU256((getAny(raw, 'req_id', 'reqId') ?? 0) as number | bigint | string),
+      (getAny(raw, 'from_address', 'fromAddress') ?? '') as string,
+      (getAny(raw, 'to_address', 'toAddress') ?? '') as string,
+      (getAny(raw, 'asset_address', 'assetAddress') ?? '') as string,
+      parseU256((getAny(raw, 'amount') ?? 0) as number | bigint | string),
       Number(getAny(raw, 'start_timestamp', 'startTimestamp', 'timestamp') ?? 0),
       getAny(raw, 'certificate')
     );
@@ -154,8 +154,8 @@ export class PendingRemunerationInfo {
     public latestGuarantee?: GuaranteeInfo | null
   ) {}
 
-  static fromRpc(raw: Record<string, any>): PendingRemunerationInfo {
-    const latest = getAny<Record<string, any>>(raw, 'latest_guarantee', 'latestGuarantee');
+  static fromRpc(raw: Record<string, unknown>): PendingRemunerationInfo {
+    const latest = getAny<Record<string, unknown>>(raw, 'latest_guarantee', 'latestGuarantee');
     return new PendingRemunerationInfo(
       TabInfo.fromRpc(getAny(raw, 'tab') ?? {}),
       latest ? GuaranteeInfo.fromRpc(latest) : null
@@ -176,17 +176,17 @@ export class CollateralEventInfo {
     public createdAt: number = 0
   ) {}
 
-  static fromRpc(raw: Record<string, any>): CollateralEventInfo {
+  static fromRpc(raw: Record<string, unknown>): CollateralEventInfo {
     const tabId = getAny(raw, 'tab_id', 'tabId');
     const reqId = getAny(raw, 'req_id', 'reqId');
     return new CollateralEventInfo(
-      getAny(raw, 'id') ?? '',
-      getAny(raw, 'user_address', 'userAddress') ?? '',
-      getAny(raw, 'asset_address', 'assetAddress') ?? '',
-      parseU256(getAny(raw, 'amount') ?? 0),
-      getAny(raw, 'event_type', 'eventType') ?? '',
-      tabId !== undefined && tabId !== null ? parseU256(tabId as any) : null,
-      reqId !== undefined && reqId !== null ? parseU256(reqId as any) : null,
+      (getAny(raw, 'id') ?? '') as string,
+      (getAny(raw, 'user_address', 'userAddress') ?? '') as string,
+      (getAny(raw, 'asset_address', 'assetAddress') ?? '') as string,
+      parseU256((getAny(raw, 'amount') ?? 0) as number | bigint | string),
+      (getAny(raw, 'event_type', 'eventType') ?? '') as string,
+      tabId !== undefined && tabId !== null ? parseU256(tabId as number | bigint | string) : null,
+      reqId !== undefined && reqId !== null ? parseU256(reqId as number | bigint | string) : null,
       getAny(raw, 'tx_id', 'txId'),
       Number(getAny(raw, 'created_at', 'createdAt') ?? 0)
     );
@@ -203,12 +203,12 @@ export class AssetBalanceInfo {
     public updatedAt: number
   ) {}
 
-  static fromRpc(raw: Record<string, any>): AssetBalanceInfo {
+  static fromRpc(raw: Record<string, unknown>): AssetBalanceInfo {
     return new AssetBalanceInfo(
-      getAny(raw, 'user_address', 'userAddress') ?? '',
-      getAny(raw, 'asset_address', 'assetAddress') ?? '',
-      parseU256(getAny(raw, 'total') ?? 0),
-      parseU256(getAny(raw, 'locked') ?? 0),
+      (getAny(raw, 'user_address', 'userAddress') ?? '') as string,
+      (getAny(raw, 'asset_address', 'assetAddress') ?? '') as string,
+      parseU256((getAny(raw, 'total') ?? 0) as number | bigint | string),
+      parseU256((getAny(raw, 'locked') ?? 0) as number | bigint | string),
       Number(getAny(raw, 'version') ?? 0),
       Number(getAny(raw, 'updated_at', 'updatedAt') ?? 0)
     );
@@ -227,12 +227,12 @@ export class RecipientPaymentInfo {
     public createdAt: number
   ) {}
 
-  static fromRpc(raw: Record<string, any>): RecipientPaymentInfo {
+  static fromRpc(raw: Record<string, unknown>): RecipientPaymentInfo {
     return new RecipientPaymentInfo(
-      getAny(raw, 'user_address', 'userAddress') ?? '',
-      getAny(raw, 'recipient_address', 'recipientAddress') ?? '',
-      getAny(raw, 'tx_hash', 'txHash') ?? '',
-      parseU256(getAny(raw, 'amount') ?? 0),
+      (getAny(raw, 'user_address', 'userAddress') ?? '') as string,
+      (getAny(raw, 'recipient_address', 'recipientAddress') ?? '') as string,
+      (getAny(raw, 'tx_hash', 'txHash') ?? '') as string,
+      parseU256((getAny(raw, 'amount') ?? 0) as number | bigint | string),
       Boolean(getAny(raw, 'verified')),
       Boolean(getAny(raw, 'finalized')),
       Boolean(getAny(raw, 'failed')),

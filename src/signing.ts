@@ -13,20 +13,22 @@ export class CorePublicParameters {
     public chainId: number
   ) {}
 
-  static fromRpc(payload: Record<string, any>): CorePublicParameters {
+  static fromRpc(payload: Record<string, unknown>): CorePublicParameters {
     const pkRaw = payload.public_key ?? payload.publicKey;
     const pk =
       typeof pkRaw === 'string'
         ? getBytes(pkRaw)
-        : pkRaw
-          ? Uint8Array.from(pkRaw)
-          : new Uint8Array();
+        : pkRaw instanceof Uint8Array
+          ? pkRaw
+          : Array.isArray(pkRaw)
+            ? Uint8Array.from(pkRaw as ArrayLike<number>)
+            : new Uint8Array();
     return new CorePublicParameters(
       pk,
-      payload.contract_address ?? payload.contractAddress,
-      payload.ethereum_http_rpc_url ?? payload.ethereumHttpRpcUrl,
-      payload.eip712_name ?? payload.eip712Name ?? '4Mica',
-      payload.eip712_version ?? payload.eip712Version ?? '1',
+      String(payload.contract_address ?? payload.contractAddress ?? ''),
+      String(payload.ethereum_http_rpc_url ?? payload.ethereumHttpRpcUrl ?? ''),
+      (payload.eip712_name ?? payload.eip712Name ?? '4Mica') as string,
+      (payload.eip712_version ?? payload.eip712Version ?? '1') as string,
       Number(payload.chain_id ?? payload.chainId)
     );
   }
@@ -116,11 +118,12 @@ export class PaymentSigner {
         return { signature, scheme };
       }
       throw new SigningError(`unsupported signing scheme: ${scheme}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err instanceof ValidationError) {
         throw new SigningError(err.message);
       }
-      throw new SigningError(err?.message ?? String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      throw new SigningError(message);
     }
   }
 }
