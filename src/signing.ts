@@ -1,11 +1,7 @@
-import { AbiCoder, TypedDataEncoder, Wallet, getBytes } from "ethers";
-import { SigningError } from "./errors";
-import {
-  PaymentGuaranteeRequestClaims,
-  PaymentSignature,
-  SigningScheme,
-} from "./models";
-import { ValidationError, normalizeAddress } from "./utils";
+import { AbiCoder, Wallet, getBytes } from 'ethers';
+import { SigningError } from './errors';
+import { PaymentGuaranteeRequestClaims, PaymentSignature, SigningScheme } from './models';
+import { ValidationError, normalizeAddress } from './utils';
 
 export class CorePublicParameters {
   constructor(
@@ -20,43 +16,40 @@ export class CorePublicParameters {
   static fromRpc(payload: Record<string, any>): CorePublicParameters {
     const pkRaw = payload.public_key ?? payload.publicKey;
     const pk =
-      typeof pkRaw === "string"
+      typeof pkRaw === 'string'
         ? getBytes(pkRaw)
         : pkRaw
-        ? Uint8Array.from(pkRaw)
-        : new Uint8Array();
+          ? Uint8Array.from(pkRaw)
+          : new Uint8Array();
     return new CorePublicParameters(
       pk,
       payload.contract_address ?? payload.contractAddress,
       payload.ethereum_http_rpc_url ?? payload.ethereumHttpRpcUrl,
-      payload.eip712_name ?? payload.eip712Name ?? "4Mica",
-      payload.eip712_version ?? payload.eip712Version ?? "1",
+      payload.eip712_name ?? payload.eip712Name ?? '4Mica',
+      payload.eip712_version ?? payload.eip712Version ?? '1',
       Number(payload.chain_id ?? payload.chainId)
     );
   }
 }
 
-function buildTypedMessage(
-  params: CorePublicParameters,
-  claims: PaymentGuaranteeRequestClaims
-) {
+function buildTypedMessage(params: CorePublicParameters, claims: PaymentGuaranteeRequestClaims) {
   return {
     types: {
       EIP712Domain: [
-        { name: "name", type: "string" },
-        { name: "version", type: "string" },
-        { name: "chainId", type: "uint256" },
+        { name: 'name', type: 'string' },
+        { name: 'version', type: 'string' },
+        { name: 'chainId', type: 'uint256' },
       ],
       SolGuaranteeRequestClaimsV1: [
-        { name: "user", type: "address" },
-        { name: "recipient", type: "address" },
-        { name: "tabId", type: "uint256" },
-        { name: "amount", type: "uint256" },
-        { name: "asset", type: "address" },
-        { name: "timestamp", type: "uint64" },
+        { name: 'user', type: 'address' },
+        { name: 'recipient', type: 'address' },
+        { name: 'tabId', type: 'uint256' },
+        { name: 'amount', type: 'uint256' },
+        { name: 'asset', type: 'address' },
+        { name: 'timestamp', type: 'uint64' },
       ],
     },
-    primaryType: "SolGuaranteeRequestClaimsV1",
+    primaryType: 'SolGuaranteeRequestClaimsV1',
     domain: {
       name: params.eip712Name,
       version: params.eip712Version,
@@ -75,7 +68,7 @@ function buildTypedMessage(
 
 function encodeEip191(claims: PaymentGuaranteeRequestClaims): Uint8Array {
   const payload = AbiCoder.defaultAbiCoder().encode(
-    ["address", "address", "uint256", "uint256", "address", "uint64"],
+    ['address', 'address', 'uint256', 'uint256', 'address', 'uint64'],
     [
       claims.userAddress,
       claims.recipientAddress,
@@ -100,10 +93,7 @@ export class PaymentSigner {
     claims: PaymentGuaranteeRequestClaims,
     scheme: SigningScheme = SigningScheme.EIP712
   ): Promise<PaymentSignature> {
-    if (
-      normalizeAddress(this.wallet.address) !==
-      normalizeAddress(claims.userAddress)
-    ) {
+    if (normalizeAddress(this.wallet.address) !== normalizeAddress(claims.userAddress)) {
       throw new SigningError(
         `address mismatch: signer ${this.wallet.address} != claims.user_address ${claims.userAddress}`
       );

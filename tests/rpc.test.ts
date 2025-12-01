@@ -1,49 +1,46 @@
-import { describe, expect, it, vi } from "vitest";
-import { RpcProxy } from "../src/rpc";
-import { RpcError } from "../src/errors";
+import { describe, expect, it, vi } from 'vitest';
+import { RpcProxy } from '../src/rpc';
+import { RpcError } from '../src/errors';
 
-describe("RpcProxy", () => {
-  it("round trips public params", async () => {
+describe('RpcProxy', () => {
+  it('round trips public params', async () => {
     const params = {
       publicKey: [1, 2, 3],
-      contractAddress: "0x1234567890abcdef1234567890abcdef12345678",
-      ethereumHttpRpcUrl: "http://localhost:8545",
-      eip712Name: "4mica",
-      eip712Version: "1",
+      contractAddress: '0x1234567890abcdef1234567890abcdef12345678',
+      ethereumHttpRpcUrl: 'http://localhost:8545',
+      eip712Name: '4mica',
+      eip712Version: '1',
       chainId: 1337,
     };
     const fetchMock = vi.fn(async (input) => {
       const url = input.toString();
-      expect(url.endsWith("/core/public-params")).toBe(true);
+      expect(url.endsWith('/core/public-params')).toBe(true);
       return new Response(JSON.stringify(params), { status: 200 });
     }) as any;
 
-    const proxy = new RpcProxy("http://example.com", undefined, fetchMock);
+    const proxy = new RpcProxy('http://example.com', undefined, fetchMock);
     const got = await proxy.getPublicParams();
     expect(got.chainId).toBe(1337);
     expect(got.contractAddress).toBe(params.contractAddress);
     expect(got.ethereumHttpRpcUrl).toBe(params.ethereumHttpRpcUrl);
   });
 
-  it("surfaces api errors", async () => {
+  it('surfaces api errors', async () => {
     const fetchMock = vi.fn(async (input) => {
-      expect(input.toString()).toContain("settlementStatus=unknown");
-      return new Response(
-        JSON.stringify({ error: "invalid settlement status: unknown" }),
-        { status: 400 }
-      );
+      expect(input.toString()).toContain('settlementStatus=unknown');
+      return new Response(JSON.stringify({ error: 'invalid settlement status: unknown' }), {
+        status: 400,
+      });
     }) as any;
-    const proxy = new RpcProxy("http://example.com", undefined, fetchMock);
-    await expect(
-      proxy.listRecipientTabs("0xdeadbeef", ["unknown"])
-    ).rejects.toThrow(RpcError);
+    const proxy = new RpcProxy('http://example.com', undefined, fetchMock);
+    await expect(proxy.listRecipientTabs('0xdeadbeef', ['unknown'])).rejects.toThrow(RpcError);
   });
 
-  it("returns decode error on invalid json", async () => {
+  it('returns decode error on invalid json', async () => {
     const fetchMock = vi.fn(async () => {
-      return new Response("not-json", { status: 200 });
+      return new Response('not-json', { status: 200 });
     }) as any;
-    const proxy = new RpcProxy("http://example.com", undefined, fetchMock);
+    const proxy = new RpcProxy('http://example.com', undefined, fetchMock);
     await expect(proxy.getPublicParams()).rejects.toThrow(RpcError);
   });
 });

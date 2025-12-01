@@ -1,11 +1,8 @@
-import { signatureToWords } from "./bls";
-import { Config } from "./config";
-import { ContractGateway } from "./contract";
-import {
-  ClientInitializationError,
-  VerificationError,
-} from "./errors";
-import { decodeGuaranteeClaims } from "./guarantee";
+import { signatureToWords } from './bls';
+import { Config } from './config';
+import { ContractGateway } from './contract';
+import { ClientInitializationError, VerificationError } from './errors';
+import { decodeGuaranteeClaims } from './guarantee';
 import {
   AssetBalanceInfo,
   BLSCert,
@@ -20,18 +17,15 @@ import {
   TabInfo,
   TabPaymentStatus,
   UserInfo,
-} from "./models";
-import { RpcProxy } from "./rpc";
-import { CorePublicParameters, PaymentSigner } from "./signing";
-import { normalizeAddress, parseU256, serializeU256 } from "./utils";
+} from './models';
+import { RpcProxy } from './rpc';
+import { CorePublicParameters, PaymentSigner } from './signing';
+import { normalizeAddress, parseU256, serializeU256 } from './utils';
 
 function tabStatusFromRpc(status: any): TabPaymentStatus {
-  const paid =
-    status.paid !== undefined ? status.paid : status.paidAmount ?? 0;
+  const paid = status.paid !== undefined ? status.paid : (status.paidAmount ?? 0);
   const remunerated =
-    status.remunerated !== undefined
-      ? status.remunerated
-      : status.paidOut ?? false;
+    status.remunerated !== undefined ? status.remunerated : (status.paidOut ?? false);
   const asset = status.asset ?? status.assetAddress;
   return {
     paid: parseU256(paid),
@@ -76,18 +70,10 @@ export class Client {
     return new Client(cfg, rpc, params, gateway, guaranteeDomain, signer);
   }
 
-  private static buildGateway(
-    cfg: Config,
-    params: CorePublicParameters
-  ): ContractGateway {
+  private static buildGateway(cfg: Config, params: CorePublicParameters): ContractGateway {
     const ethRpcUrl = cfg.ethereumHttpRpcUrl ?? params.ethereumHttpRpcUrl;
     const contractAddress = cfg.contractAddress ?? params.contractAddress;
-    return new ContractGateway(
-      ethRpcUrl,
-      cfg.walletPrivateKey,
-      contractAddress,
-      params.chainId
-    );
+    return new ContractGateway(ethRpcUrl, cfg.walletPrivateKey, contractAddress, params.chainId);
   }
 
   private static async validateChainId(
@@ -159,12 +145,7 @@ export class UserClient {
     erc20Token?: string
   ) {
     if (erc20Token) {
-      return this.client.gateway.payTabErc20(
-        tabId,
-        amount,
-        erc20Token,
-        recipientAddress
-      );
+      return this.client.gateway.payTabErc20(tabId, amount, erc20Token, recipientAddress);
     }
     return this.client.gateway.payTabEth(tabId, reqId, amount, recipientAddress);
   }
@@ -195,7 +176,7 @@ export class RecipientClient {
 
   private checkSigner(expected: string): void {
     if (normalizeAddress(expected) !== this.recipientAddress) {
-      throw new VerificationError("signer address does not match recipient address");
+      throw new VerificationError('signer address does not match recipient address');
     }
   }
 
@@ -229,7 +210,7 @@ export class RecipientClient {
     this.checkSigner(claims.recipientAddress);
     const payload = {
       claims: {
-        version: "v1",
+        version: 'v1',
         user_address: claims.userAddress,
         recipient_address: claims.recipientAddress,
         tab_id: serializeU256(claims.tabId),
@@ -246,12 +227,12 @@ export class RecipientClient {
 
   verifyPaymentGuarantee(cert: BLSCert): PaymentGuaranteeClaims {
     const claims = decodeGuaranteeClaims(cert.claims);
-    const domainHex = this.guaranteeDomain.startsWith("0x")
+    const domainHex = this.guaranteeDomain.startsWith('0x')
       ? this.guaranteeDomain.slice(2)
-      : Buffer.from(this.guaranteeDomain).toString("hex");
-    const claimsHex = Buffer.from(claims.domain).toString("hex");
+      : Buffer.from(this.guaranteeDomain).toString('hex');
+    const claimsHex = Buffer.from(claims.domain).toString('hex');
     if (claimsHex !== domainHex) {
-      throw new VerificationError("guarantee domain mismatch");
+      throw new VerificationError('guarantee domain mismatch');
     }
     return claims;
   }
@@ -259,7 +240,7 @@ export class RecipientClient {
   async remunerate(cert: BLSCert) {
     this.verifyPaymentGuarantee(cert);
     const sigWords = signatureToWords(cert.signature);
-    const claimsBytes = Buffer.from(cert.claims.replace(/^0x/, ""), "hex");
+    const claimsBytes = Buffer.from(cert.claims.replace(/^0x/, ''), 'hex');
     return this.client.gateway.remunerate(claimsBytes, sigWords);
   }
 
@@ -269,9 +250,7 @@ export class RecipientClient {
   }
 
   async listPendingRemunerations(): Promise<PendingRemunerationInfo[]> {
-    const items = await this.client.rpc.listPendingRemunerations(
-      this.recipientAddress
-    );
+    const items = await this.client.rpc.listPendingRemunerations(this.recipientAddress);
     return items.map((item) => PendingRemunerationInfo.fromRpc(item));
   }
 
@@ -280,13 +259,8 @@ export class RecipientClient {
     return result ? TabInfo.fromRpc(result) : null;
   }
 
-  async listRecipientTabs(
-    settlementStatuses?: string[]
-  ): Promise<TabInfo[]> {
-    const tabs = await this.client.rpc.listRecipientTabs(
-      this.recipientAddress,
-      settlementStatuses
-    );
+  async listRecipientTabs(settlementStatuses?: string[]): Promise<TabInfo[]> {
+    const tabs = await this.client.rpc.listRecipientTabs(this.recipientAddress, settlementStatuses);
     return tabs.map((t) => TabInfo.fromRpc(t));
   }
 
@@ -295,9 +269,7 @@ export class RecipientClient {
     return guarantees.map((g) => GuaranteeInfo.fromRpc(g));
   }
 
-  async getLatestGuarantee(
-    tabId: number | bigint
-  ): Promise<GuaranteeInfo | null> {
+  async getLatestGuarantee(tabId: number | bigint): Promise<GuaranteeInfo | null> {
     const result = await this.client.rpc.getLatestGuarantee(tabId);
     return result ? GuaranteeInfo.fromRpc(result) : null;
   }
@@ -311,15 +283,11 @@ export class RecipientClient {
   }
 
   async listRecipientPayments(): Promise<RecipientPaymentInfo[]> {
-    const payments = await this.client.rpc.listRecipientPayments(
-      this.recipientAddress
-    );
+    const payments = await this.client.rpc.listRecipientPayments(this.recipientAddress);
     return payments.map((p) => RecipientPaymentInfo.fromRpc(p));
   }
 
-  async getCollateralEventsForTab(
-    tabId: number | bigint
-  ): Promise<CollateralEventInfo[]> {
+  async getCollateralEventsForTab(tabId: number | bigint): Promise<CollateralEventInfo[]> {
     const events = await this.client.rpc.getCollateralEventsForTab(tabId);
     return events.map((ev) => CollateralEventInfo.fromRpc(ev));
   }
@@ -328,10 +296,7 @@ export class RecipientClient {
     userAddress: string,
     assetAddress: string
   ): Promise<AssetBalanceInfo | null> {
-    const balance = await this.client.rpc.getUserAssetBalance(
-      userAddress,
-      assetAddress
-    );
+    const balance = await this.client.rpc.getUserAssetBalance(userAddress, assetAddress);
     return balance ? AssetBalanceInfo.fromRpc(balance) : null;
   }
 }

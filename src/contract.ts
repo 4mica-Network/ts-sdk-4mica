@@ -1,15 +1,8 @@
-import {
-  Contract,
-  JsonRpcProvider,
-  Wallet,
-  getBytes,
-  hexlify,
-  toBeHex,
-} from "ethers";
-import core4micaAbi from "./abi/core4mica.json";
-import erc20Abi from "./abi/erc20.json";
-import { ContractError } from "./errors";
-import { parseU256 } from "./utils";
+import { Contract, JsonRpcProvider, Wallet, getBytes, hexlify, toBeHex } from 'ethers';
+import core4micaAbi from './abi/core4mica.json';
+import erc20Abi from './abi/erc20.json';
+import { ContractError } from './errors';
+import { parseU256 } from './utils';
 
 type ContractFactory = (address: string, abi: any, signer: Wallet) => Contract;
 
@@ -27,12 +20,10 @@ export class ContractGateway {
     provider?: JsonRpcProvider,
     contractFactory?: ContractFactory
   ) {
-    this.provider =
-      provider ?? new JsonRpcProvider(ethRpcUrl, { chainId: Number(chainId) });
+    this.provider = provider ?? new JsonRpcProvider(ethRpcUrl, { chainId: Number(chainId) });
     this.wallet = new Wallet(privateKey, this.provider);
     const factory: ContractFactory =
-      contractFactory ??
-      ((addr, abi, signer) => new Contract(addr, abi.abi ?? abi, signer));
+      contractFactory ?? ((addr, abi, signer) => new Contract(addr, abi.abi ?? abi, signer));
     this.contract = factory(contractAddress, core4micaAbi, this.wallet);
   }
 
@@ -44,10 +35,7 @@ export class ContractGateway {
   private erc20(address: string): Contract {
     const checksum = address;
     if (!this.erc20Cache.has(checksum)) {
-      this.erc20Cache.set(
-        checksum,
-        new Contract(checksum, erc20Abi.abi ?? erc20Abi, this.wallet)
-      );
+      this.erc20Cache.set(checksum, new Contract(checksum, erc20Abi.abi ?? erc20Abi, this.wallet));
     }
     return this.erc20Cache.get(checksum)!;
   }
@@ -76,9 +64,7 @@ export class ContractGateway {
 
   async deposit(amount: number | bigint | string, erc20Token?: string): Promise<any> {
     if (erc20Token) {
-      return this.send(
-        this.contract.depositStablecoin(erc20Token, parseU256(amount))
-      );
+      return this.send(this.contract.depositStablecoin(erc20Token, parseU256(amount)));
     }
     return this.send(
       this.contract.deposit({
@@ -88,7 +74,12 @@ export class ContractGateway {
   }
 
   async getUserAssets(): Promise<
-    { asset: string; collateral: bigint; withdrawal_request_timestamp: bigint; withdrawal_request_amount: bigint }[]
+    {
+      asset: string;
+      collateral: bigint;
+      withdrawal_request_timestamp: bigint;
+      withdrawal_request_amount: bigint;
+    }[]
   > {
     try {
       const result = await this.contract.getUserAllAssets(this.wallet.address);
@@ -109,9 +100,7 @@ export class ContractGateway {
     asset: string;
   }> {
     try {
-      const [paid, remunerated, asset] = await this.contract.getPaymentStatus(
-        parseU256(tabId)
-      );
+      const [paid, remunerated, asset] = await this.contract.getPaymentStatus(parseU256(tabId));
       return {
         paid: parseU256(paid),
         remunerated: Boolean(remunerated),
@@ -146,23 +135,13 @@ export class ContractGateway {
     recipient: string
   ): Promise<any> {
     return this.send(
-      this.contract.payTabInERC20Token(
-        parseU256(tabId),
-        erc20Token,
-        parseU256(amount),
-        recipient
-      )
+      this.contract.payTabInERC20Token(parseU256(tabId), erc20Token, parseU256(amount), recipient)
     );
   }
 
-  async requestWithdrawal(
-    amount: number | bigint | string,
-    erc20Token?: string
-  ): Promise<any> {
+  async requestWithdrawal(amount: number | bigint | string, erc20Token?: string): Promise<any> {
     if (erc20Token) {
-      return this.send(
-        this.contract.requestWithdrawal(erc20Token, parseU256(amount))
-      );
+      return this.send(this.contract.requestWithdrawal(erc20Token, parseU256(amount)));
     }
     return this.send(this.contract.requestWithdrawal(parseU256(amount)));
   }
@@ -183,8 +162,6 @@ export class ContractGateway {
 
   async remunerate(claimsBlob: Uint8Array, signatureWords: Uint8Array[]): Promise<any> {
     const sigStruct = signatureWords.map((word) => hexlify(getBytes(word)));
-    return this.send(
-      this.contract.remunerate(hexlify(claimsBlob), sigStruct)
-    );
+    return this.send(this.contract.remunerate(hexlify(claimsBlob), sigStruct));
   }
 }

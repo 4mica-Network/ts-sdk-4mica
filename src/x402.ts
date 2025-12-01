@@ -1,7 +1,7 @@
-import { PaymentGuaranteeRequestClaims, PaymentSignature, SigningScheme } from "./models";
-import { normalizeAddress, parseU256 } from "./utils";
-import { X402Error } from "./errors";
-import type { FetchFn } from "./rpc";
+import { PaymentGuaranteeRequestClaims, PaymentSignature, SigningScheme } from './models';
+import { normalizeAddress, parseU256 } from './utils';
+import { X402Error } from './errors';
+import type { FetchFn } from './rpc';
 
 export interface PaymentRequirementsInit {
   scheme: string;
@@ -40,22 +40,22 @@ export class PaymentRequirements {
       return defaultValue;
     };
 
-    const amount = pick(["maxAmountRequired", "max_amount_required"]);
-    const payTo = pick(["payTo", "pay_to"]);
-    const asset = pick(["asset", "assetAddress", "asset_address"]);
-    const scheme = pick(["scheme"]);
-    const network = pick(["network"]);
+    const amount = pick(['maxAmountRequired', 'max_amount_required']);
+    const payTo = pick(['payTo', 'pay_to']);
+    const asset = pick(['asset', 'assetAddress', 'asset_address']);
+    const scheme = pick(['scheme']);
+    const network = pick(['network']);
     if (!amount || !payTo || !asset || !scheme || !network) {
       const missing = [
-        ["scheme", scheme],
-        ["network", network],
-        ["maxAmountRequired", amount],
-        ["payTo", payTo],
-        ["asset", asset],
+        ['scheme', scheme],
+        ['network', network],
+        ['maxAmountRequired', amount],
+        ['payTo', payTo],
+        ['asset', asset],
       ]
         .filter(([, value]) => !value)
         .map(([key]) => key)
-        .join(", ");
+        .join(', ');
       throw new X402Error(`payment requirements missing fields: ${missing}`);
     }
 
@@ -65,20 +65,20 @@ export class PaymentRequirements {
       String(amount),
       payTo,
       asset,
-      pick(["extra"], {}) ?? {},
-      pick(["resource"]),
-      pick(["description"]),
-      pick(["mimeType", "mime_type"]),
-      pick(["outputSchema", "output_schema"]),
-      pick(["maxTimeoutSeconds", "max_timeout_seconds"])
+      pick(['extra'], {}) ?? {},
+      pick(['resource']),
+      pick(['description']),
+      pick(['mimeType', 'mime_type']),
+      pick(['outputSchema', 'output_schema']),
+      pick(['maxTimeoutSeconds', 'max_timeout_seconds'])
     );
   }
 
   toPayload(): Record<string, any> {
     const extraPayload = { ...(this.extra ?? {}) };
-    if ("tab_endpoint" in extraPayload && !("tabEndpoint" in extraPayload)) {
-      extraPayload["tabEndpoint"] = extraPayload["tab_endpoint"];
-      delete extraPayload["tab_endpoint"];
+    if ('tab_endpoint' in extraPayload && !('tabEndpoint' in extraPayload)) {
+      extraPayload['tabEndpoint'] = extraPayload['tab_endpoint'];
+      delete extraPayload['tab_endpoint'];
     }
     const payload: Record<string, any> = {
       scheme: this.scheme,
@@ -92,8 +92,7 @@ export class PaymentRequirements {
     if (this.description !== undefined) payload.description = this.description;
     if (this.mimeType !== undefined) payload.mimeType = this.mimeType;
     if (this.outputSchema !== undefined) payload.outputSchema = this.outputSchema;
-    if (this.maxTimeoutSeconds !== undefined)
-      payload.maxTimeoutSeconds = this.maxTimeoutSeconds;
+    if (this.maxTimeoutSeconds !== undefined) payload.maxTimeoutSeconds = this.maxTimeoutSeconds;
     return payload;
   }
 }
@@ -108,7 +107,10 @@ export class PaymentRequirementsExtra {
 }
 
 export class TabResponse {
-  constructor(public tabId: string, public userAddress: string) {}
+  constructor(
+    public tabId: string,
+    public userAddress: string
+  ) {}
 }
 
 export class X402PaymentEnvelope {
@@ -138,7 +140,10 @@ export class X402SignedPayment {
 }
 
 export class X402SettledPayment {
-  constructor(public payment: X402SignedPayment, public settlement: any) {}
+  constructor(
+    public payment: X402SignedPayment,
+    public settlement: any
+  ) {}
 }
 
 export interface FlowSigner {
@@ -151,7 +156,10 @@ export interface FlowSigner {
 export class X402Flow {
   private fetchFn: FetchFn;
 
-  constructor(private signer: FlowSigner, fetchFn: FetchFn = fetch) {
+  constructor(
+    private signer: FlowSigner,
+    fetchFn: FetchFn = fetch
+  ) {
     this.fetchFn = fetchFn;
   }
 
@@ -166,18 +174,11 @@ export class X402Flow {
     X402Flow.validateScheme(paymentRequirements.scheme);
     const tab = await this.requestTab(paymentRequirements, userAddress);
     const claims = this.buildClaims(paymentRequirements, tab, userAddress);
-    const signature = await this.signer.signPayment(
-      claims,
-      SigningScheme.EIP712
-    );
-    const envelope = X402Flow.buildEnvelope(
-      paymentRequirements,
-      claims,
-      signature
-    );
+    const signature = await this.signer.signPayment(claims, SigningScheme.EIP712);
+    const envelope = X402Flow.buildEnvelope(paymentRequirements, claims, signature);
     const payload = envelope.toPayload();
     payload.x402Version ??= envelope.x402Version;
-    const header = Buffer.from(JSON.stringify(payload)).toString("base64");
+    const header = Buffer.from(JSON.stringify(payload)).toString('base64');
     return new X402SignedPayment(header, claims, signature);
   }
 
@@ -186,10 +187,10 @@ export class X402Flow {
     paymentRequirements: PaymentRequirements,
     facilitatorUrl: string
   ): Promise<X402SettledPayment> {
-    const url = `${facilitatorUrl.replace(/\/$/, "")}/settle`;
+    const url = `${facilitatorUrl.replace(/\/$/, '')}/settle`;
     const response = await this.fetchFn(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         x402Version: 1,
         paymentHeader: payment.header,
@@ -198,9 +199,7 @@ export class X402Flow {
     });
     const data = await response.text();
     if (!response.ok) {
-      throw new X402Error(
-        `settlement failed with status ${response.status}: ${data}`
-      );
+      throw new X402Error(`settlement failed with status ${response.status}: ${data}`);
     }
     const settlement = data ? JSON.parse(data) : {};
     return new X402SettledPayment(payment, settlement);
@@ -212,11 +211,11 @@ export class X402Flow {
   ): Promise<TabResponse> {
     const extra = PaymentRequirementsExtra.fromRaw(paymentRequirements.extra);
     if (!extra.tabEndpoint) {
-      throw new X402Error("missing tabEndpoint in paymentRequirements.extra");
+      throw new X402Error('missing tabEndpoint in paymentRequirements.extra');
     }
     const resp = await this.fetchFn(extra.tabEndpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         userAddress,
         paymentRequirements: paymentRequirements.toPayload(),
@@ -227,10 +226,7 @@ export class X402Flow {
       throw new X402Error(`tab resolution failed: ${resp.status} ${text}`);
     }
     const body = await resp.json();
-    return new TabResponse(
-      body.tabId ?? body.tab_id,
-      body.userAddress ?? body.user_address
-    );
+    return new TabResponse(body.tabId ?? body.tab_id, body.userAddress ?? body.user_address);
   }
 
   protected buildClaims(
@@ -257,7 +253,7 @@ export class X402Flow {
   }
 
   private static validateScheme(scheme: string): void {
-    if (!scheme.toLowerCase().includes("4mica")) {
+    if (!scheme.toLowerCase().includes('4mica')) {
       throw new X402Error(`invalid scheme: ${scheme}`);
     }
   }
@@ -269,7 +265,7 @@ export class X402Flow {
   ): X402PaymentEnvelope {
     const payload = {
       claims: {
-        version: "v1",
+        version: 'v1',
         user_address: claims.userAddress,
         recipient_address: claims.recipientAddress,
         tab_id: `0x${claims.tabId.toString(16)}`,

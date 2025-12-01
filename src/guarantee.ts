@@ -1,36 +1,34 @@
-import { AbiCoder, getBytes } from "ethers";
-import { VerificationError } from "./errors";
-import { PaymentGuaranteeClaims } from "./models";
-import { parseU256 } from "./utils";
+import { AbiCoder, getBytes } from 'ethers';
+import { VerificationError } from './errors';
+import { PaymentGuaranteeClaims } from './models';
+import { parseU256 } from './utils';
 
 const CLAIM_TYPES = [
-  "bytes32",
-  "uint256",
-  "uint256",
-  "address",
-  "address",
-  "uint256",
-  "uint256",
-  "address",
-  "uint64",
-  "uint64",
+  'bytes32',
+  'uint256',
+  'uint256',
+  'address',
+  'address',
+  'uint256',
+  'uint256',
+  'address',
+  'uint64',
+  'uint64',
 ];
 
 const coder = AbiCoder.defaultAbiCoder();
 
 function ensureDomainBytes(domain: string | Uint8Array): Uint8Array {
-  const bytes = typeof domain === "string" ? getBytes(domain) : domain;
+  const bytes = typeof domain === 'string' ? getBytes(domain) : domain;
   if (bytes.length !== 32) {
-    throw new VerificationError("domain separator must be 32 bytes");
+    throw new VerificationError('domain separator must be 32 bytes');
   }
   return bytes;
 }
 
 export function encodeGuaranteeClaims(claims: PaymentGuaranteeClaims): string {
   if (claims.version !== 1) {
-    throw new VerificationError(
-      `unsupported guarantee claims version: ${claims.version}`
-    );
+    throw new VerificationError(`unsupported guarantee claims version: ${claims.version}`);
   }
 
   const domain = ensureDomainBytes(claims.domain);
@@ -46,15 +44,12 @@ export function encodeGuaranteeClaims(claims: PaymentGuaranteeClaims): string {
     BigInt(claims.timestamp),
     BigInt(claims.version),
   ]);
-  return coder.encode(["uint64", "bytes"], [BigInt(claims.version), encoded]);
+  return coder.encode(['uint64', 'bytes'], [BigInt(claims.version), encoded]);
 }
 
 export function decodeGuaranteeClaims(data: string | Uint8Array): PaymentGuaranteeClaims {
-  const rawBytes = typeof data === "string" ? getBytes(data) : data;
-  const [version, encoded] = coder.decode(["uint64", "bytes"], rawBytes) as [
-    bigint,
-    string
-  ];
+  const rawBytes = typeof data === 'string' ? getBytes(data) : data;
+  const [version, encoded] = coder.decode(['uint64', 'bytes'], rawBytes) as [bigint, string];
   if (version !== 1n) {
     throw new VerificationError(`unsupported guarantee claims version: ${version}`);
   }
@@ -80,7 +75,7 @@ export function decodeGuaranteeClaims(data: string | Uint8Array): PaymentGuarant
     bigint,
     string,
     bigint,
-    bigint
+    bigint,
   ];
 
   return {
