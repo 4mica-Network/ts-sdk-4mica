@@ -41,7 +41,7 @@ export class Client {
   readonly guaranteeDomain: string;
   readonly user: UserClient;
   readonly recipient: RecipientClient;
-  private signer: PaymentSigner;
+  readonly signer: PaymentSigner;
 
   private constructor(
     cfg: Config,

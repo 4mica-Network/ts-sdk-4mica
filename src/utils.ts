@@ -1,4 +1,4 @@
-import { getAddress, isAddress, Hex } from 'ethers';
+import { getAddress, isAddress } from 'ethers';
 
 export class ValidationError extends Error {
   constructor(message: string) {
@@ -28,11 +28,11 @@ export function normalizePrivateKey(raw: string): string {
 }
 
 export function normalizeAddress(raw: string): string {
-  const candidate = raw;
+  const candidate: string = String(raw);
   if (isAddress(candidate)) {
     return getAddress(candidate);
   }
-  const lower = candidate.toLowerCase();
+  const lower: string = (candidate as string).toLowerCase();
   if (isAddress(lower)) {
     return getAddress(lower);
   }
@@ -70,6 +70,6 @@ export function parseU256(value: number | bigint | string): bigint {
   throw new ValidationError(`unsupported numeric type: ${typeof value}`);
 }
 
-export function serializeU256(value: number | bigint | string): Hex {
+export function serializeU256(value: number | bigint | string): string {
   return `0x${parseU256(value).toString(16)}`;
 }

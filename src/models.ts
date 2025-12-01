@@ -185,8 +185,8 @@ export class CollateralEventInfo {
       getAny(raw, 'asset_address', 'assetAddress') ?? '',
       parseU256(getAny(raw, 'amount') ?? 0),
       getAny(raw, 'event_type', 'eventType') ?? '',
-      tabId !== undefined && tabId !== null ? parseU256(tabId) : null,
-      reqId !== undefined && reqId !== null ? parseU256(reqId) : null,
+      tabId !== undefined && tabId !== null ? parseU256(tabId as any) : null,
+      reqId !== undefined && reqId !== null ? parseU256(reqId as any) : null,
       getAny(raw, 'tx_id', 'txId'),
       Number(getAny(raw, 'created_at', 'createdAt') ?? 0)
     );

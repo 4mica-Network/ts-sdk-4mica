@@ -123,7 +123,7 @@ export class ContractGateway {
     const tx = {
       to: recipient,
       value: parseU256(amount),
-      data,
+      data: hexlify(data),
     };
     return this.send(this.wallet.sendTransaction(tx));
   }

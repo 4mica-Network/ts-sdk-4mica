@@ -102,9 +102,10 @@ export class PaymentSigner {
     try {
       if (scheme === SigningScheme.EIP712) {
         const typed = buildTypedMessage(params, claims);
+        const claimsTypes = [...typed.types.SolGuaranteeRequestClaimsV1];
         const signature = await this.wallet.signTypedData(
           typed.domain,
-          { SolGuaranteeRequestClaimsV1: typed.types.SolGuaranteeRequestClaimsV1 },
+          { SolGuaranteeRequestClaimsV1: claimsTypes },
           typed.message
         );
         return { signature, scheme };

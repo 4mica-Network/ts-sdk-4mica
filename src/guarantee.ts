@@ -49,7 +49,10 @@ export function encodeGuaranteeClaims(claims: PaymentGuaranteeClaims): string {
 
 export function decodeGuaranteeClaims(data: string | Uint8Array): PaymentGuaranteeClaims {
   const rawBytes = typeof data === 'string' ? getBytes(data) : data;
-  const [version, encoded] = coder.decode(['uint64', 'bytes'], rawBytes) as [bigint, string];
+  const [version, encoded] = coder.decode(['uint64', 'bytes'], rawBytes) as unknown as [
+    bigint,
+    string,
+  ];
   if (version !== 1n) {
     throw new VerificationError(`unsupported guarantee claims version: ${version}`);
   }
@@ -65,7 +68,7 @@ export function decodeGuaranteeClaims(data: string | Uint8Array): PaymentGuarant
     asset,
     timestamp,
     claimsVersion,
-  ] = coder.decode(CLAIM_TYPES, encoded) as [
+  ] = coder.decode(CLAIM_TYPES, encoded) as unknown as [
     string,
     bigint,
     bigint,
