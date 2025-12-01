@@ -20,7 +20,12 @@ export class ContractGateway {
     provider?: JsonRpcProvider,
     contractFactory?: ContractFactory
   ) {
-    this.provider = provider ?? new JsonRpcProvider(ethRpcUrl, { chainId: Number(chainId) });
+    const parsedChainId = Number(chainId);
+    if (!Number.isFinite(parsedChainId)) {
+      throw new ContractError(`invalid chain id: ${chainId}`);
+    }
+    const networkish = { chainId: parsedChainId, name: `chain-${parsedChainId}` };
+    this.provider = provider ?? new JsonRpcProvider(ethRpcUrl, networkish);
     this.wallet = new Wallet(privateKey, this.provider);
     const factory: ContractFactory =
       contractFactory ?? ((addr, abi, signer) => new Contract(addr, abi.abi ?? abi, signer));
