@@ -166,23 +166,25 @@ export class ContractGateway {
 
   async requestWithdrawal(amount: number | bigint | string, erc20Token?: string): Promise<unknown> {
     if (erc20Token) {
-      return this.send(this.contract.requestWithdrawal(erc20Token, parseU256(amount)));
+      return this.send(
+        this.contract['requestWithdrawal(address,uint256)'](erc20Token, parseU256(amount))
+      );
     }
-    return this.send(this.contract.requestWithdrawal(parseU256(amount)));
+    return this.send(this.contract['requestWithdrawal(uint256)'](parseU256(amount)));
   }
 
   async cancelWithdrawal(erc20Token?: string): Promise<unknown> {
     if (erc20Token) {
-      return this.send(this.contract.cancelWithdrawal(erc20Token));
+      return this.send(this.contract['cancelWithdrawal(address)'](erc20Token));
     }
-    return this.send(this.contract.cancelWithdrawal());
+    return this.send(this.contract['cancelWithdrawal()']());
   }
 
   async finalizeWithdrawal(erc20Token?: string): Promise<unknown> {
     if (erc20Token) {
-      return this.send(this.contract.finalizeWithdrawal(erc20Token));
+      return this.send(this.contract['finalizeWithdrawal(address)'](erc20Token));
     }
-    return this.send(this.contract.finalizeWithdrawal());
+    return this.send(this.contract['finalizeWithdrawal()']());
   }
 
   async remunerate(claimsBlob: Uint8Array, signatureWords: Uint8Array[]): Promise<unknown> {

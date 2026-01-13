@@ -229,6 +229,7 @@ export class RecipientClient {
         user_address: claims.userAddress,
         recipient_address: claims.recipientAddress,
         tab_id: serializeU256(claims.tabId),
+        req_id: serializeU256(claims.reqId),
         amount: serializeU256(claims.amount),
         asset_address: claims.assetAddress,
         timestamp: Number(claims.timestamp),

@@ -123,10 +123,11 @@ examples/python_client/requirements.txt`). A TypeScript version lives in `exampl
       "user_address": "<0x-prefixed checksum string>",
       "recipient_address": "<0x-prefixed checksum string>",
       "tab_id": "<decimal or 0x value>",
+      "req_id": "<decimal or 0x value>",
       "amount": "<decimal or 0x value>",
       "asset_address": "<0x-prefixed checksum string>",
       "timestamp": 1716500000,
-      "version": 1
+      "version": "v1"
     },
     "signature": "<0x-prefixed wallet signature>",
     "scheme": "eip712"
@@ -150,7 +151,7 @@ The facilitator enforces that:
 - `POST /tabs`
   - Request: `{ "userAddress", "recipientAddress", "erc20Token"?, "ttlSeconds"? }`.
     Use `erc20Token = null` (or omit it) for ETH tabs; otherwise pass the token contract address.
-  - Response: `{ "tabId", "userAddress", "recipientAddress", "assetAddress", "startTimestamp", "ttlSeconds" }`.
+  - Response: `{ "tabId", "userAddress", "recipientAddress", "assetAddress", "startTimestamp", "ttlSeconds", "nextReqId"? }`.
     `tabId` is always emitted as a canonical hex string. Recipients call this after a user shares
     their wallet; the facilitator reuses the existing tab for that pair whenever possible.
 - `POST /verify`

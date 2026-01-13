@@ -1,7 +1,11 @@
+import {
+  ADMIN_API_KEY_HEADER,
+  AdminApiKeyInfo,
+  AdminApiKeySecret,
+  UserSuspensionStatus,
+} from './models';
 import { CorePublicParameters } from './signing';
 import { RpcError } from './errors';
-
-const ADMIN_API_KEY_HEADER = 'x-api-key';
 
 export type FetchFn = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -59,7 +63,10 @@ export class RpcProxy {
     } else if (typeof payload === 'string' && payload.trim()) {
       message = payload.trim();
     }
-    throw new RpcError(`${response.status}: ${message}`);
+    throw new RpcError(`${response.status}: ${message}`, {
+      status: response.status,
+      body: payload,
+    });
   }
 
   private async get<T>(path: string): Promise<T> {
@@ -102,8 +109,8 @@ export class RpcProxy {
     );
   }
 
-  async getTab(tabId: number | bigint): Promise<Record<string, unknown>> {
-    return this.get<Record<string, unknown>>(`/core/tabs/${serializeTabId(tabId)}`);
+  async getTab(tabId: number | bigint): Promise<Record<string, unknown> | null> {
+    return this.get<Record<string, unknown> | null>(`/core/tabs/${serializeTabId(tabId)}`);
   }
 
   async listRecipientTabs(
@@ -113,7 +120,7 @@ export class RpcProxy {
     let query = '';
     if (settlementStatuses?.length) {
       query =
-        '?' + settlementStatuses.map((s) => `settlementStatus=${encodeURIComponent(s)}`).join('&');
+        '?' + settlementStatuses.map((s) => `settlement_status=${encodeURIComponent(s)}`).join('&');
     }
     return this.get<Record<string, unknown>[]>(`/core/recipients/${recipientAddress}/tabs${query}`);
   }
@@ -122,8 +129,8 @@ export class RpcProxy {
     return this.get<Record<string, unknown>[]>(`/core/tabs/${serializeTabId(tabId)}/guarantees`);
   }
 
-  async getLatestGuarantee(tabId: number | bigint): Promise<Record<string, unknown>> {
-    return this.get<Record<string, unknown>>(
+  async getLatestGuarantee(tabId: number | bigint): Promise<Record<string, unknown> | null> {
+    return this.get<Record<string, unknown> | null>(
       `/core/tabs/${serializeTabId(tabId)}/guarantees/latest`
     );
   }
@@ -131,8 +138,8 @@ export class RpcProxy {
   async getGuarantee(
     tabId: number | bigint,
     reqId: number | bigint
-  ): Promise<Record<string, unknown>> {
-    return this.get<Record<string, unknown>>(
+  ): Promise<Record<string, unknown> | null> {
+    return this.get<Record<string, unknown> | null>(
       `/core/tabs/${serializeTabId(tabId)}/guarantees/${reqId}`
     );
   }
@@ -150,23 +157,37 @@ export class RpcProxy {
   async getUserAssetBalance(
     userAddress: string,
     assetAddress: string
-  ): Promise<Record<string, unknown>> {
-    return this.get<Record<string, unknown>>(`/core/users/${userAddress}/assets/${assetAddress}`);
+  ): Promise<Record<string, unknown> | null> {
+    return this.get<Record<string, unknown> | null>(
+      `/core/users/${userAddress}/assets/${assetAddress}`
+    );
   }
 
-  async updateUserSuspension(userAddress: string, suspended: boolean): Promise<unknown> {
-    return this.post(`/core/users/${userAddress}/suspension`, { suspended });
+  async updateUserSuspension(
+    userAddress: string,
+    suspended: boolean
+  ): Promise<UserSuspensionStatus> {
+    const data = await this.post<Record<string, unknown>>(`/core/users/${userAddress}/suspension`, {
+      suspended,
+    });
+    return UserSuspensionStatus.fromRpc(data);
   }
 
-  async createAdminApiKey(body: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.post<Record<string, unknown>>('/core/admin/api-keys', body);
+  async createAdminApiKey(body: Record<string, unknown>): Promise<AdminApiKeySecret> {
+    const data = await this.post<Record<string, unknown>>('/core/admin/api-keys', body);
+    return AdminApiKeySecret.fromRpc(data);
   }
 
-  async listAdminApiKeys(): Promise<Record<string, unknown>[]> {
-    return this.get<Record<string, unknown>[]>('/core/admin/api-keys');
+  async listAdminApiKeys(): Promise<AdminApiKeyInfo[]> {
+    const data = await this.get<Record<string, unknown>[]>('/core/admin/api-keys');
+    return data.map((entry) => AdminApiKeyInfo.fromRpc(entry));
   }
 
-  async revokeAdminApiKey(keyId: string): Promise<unknown> {
-    return this.post(`/core/admin/api-keys/${keyId}/revoke`, {});
+  async revokeAdminApiKey(keyId: string): Promise<AdminApiKeyInfo> {
+    const data = await this.post<Record<string, unknown>>(
+      `/core/admin/api-keys/${keyId}/revoke`,
+      {}
+    );
+    return AdminApiKeyInfo.fromRpc(data);
   }
 }

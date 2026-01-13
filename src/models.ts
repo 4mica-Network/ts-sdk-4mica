@@ -5,6 +5,11 @@ export enum SigningScheme {
   EIP191 = 'eip191',
 }
 
+export const ADMIN_API_KEY_HEADER = 'x-api-key';
+export const ADMIN_API_KEY_PREFIX = 'ak_';
+export const ADMIN_SCOPE_SUSPEND_USERS = 'user_suspension:write';
+export const ADMIN_SCOPE_MANAGE_KEYS = 'admin_api_keys:manage';
+
 export interface PaymentSignature {
   signature: string;
   scheme: SigningScheme;
@@ -14,6 +19,7 @@ export class PaymentGuaranteeRequestClaims {
   userAddress: string;
   recipientAddress: string;
   tabId: bigint;
+  reqId: bigint;
   amount: bigint;
   timestamp: number;
   assetAddress: string;
@@ -22,6 +28,7 @@ export class PaymentGuaranteeRequestClaims {
     userAddress: string;
     recipientAddress: string;
     tabId: bigint;
+    reqId?: bigint;
     amount: bigint;
     timestamp: number;
     assetAddress: string;
@@ -29,6 +36,7 @@ export class PaymentGuaranteeRequestClaims {
     this.userAddress = init.userAddress;
     this.recipientAddress = init.recipientAddress;
     this.tabId = init.tabId;
+    this.reqId = init.reqId ?? 0n;
     this.amount = init.amount;
     this.timestamp = init.timestamp;
     this.assetAddress = init.assetAddress;
@@ -40,13 +48,15 @@ export class PaymentGuaranteeRequestClaims {
     tabId: number | bigint | string,
     amount: number | bigint | string,
     timestamp: number,
-    erc20Token?: string | null
+    erc20Token?: string | null,
+    reqId?: number | bigint | string
   ): PaymentGuaranteeRequestClaims {
     const asset = erc20Token ?? '0x0000000000000000000000000000000000000000';
     return new PaymentGuaranteeRequestClaims({
       userAddress: normalizeAddress(userAddress),
       recipientAddress: normalizeAddress(recipientAddress),
       tabId: parseU256(tabId),
+      reqId: reqId !== undefined ? parseU256(reqId) : 0n,
       amount: parseU256(amount),
       timestamp: Number(timestamp),
       assetAddress: normalizeAddress(asset),
@@ -83,6 +93,63 @@ export interface UserInfo {
   collateral: bigint;
   withdrawalRequestAmount: bigint;
   withdrawalRequestTimestamp: number;
+}
+
+export class UserSuspensionStatus {
+  constructor(
+    public userAddress: string,
+    public suspended: boolean,
+    public updatedAt: number
+  ) {}
+
+  static fromRpc(raw: Record<string, unknown>): UserSuspensionStatus {
+    return new UserSuspensionStatus(
+      (getAny(raw, 'user_address', 'userAddress') ?? '') as string,
+      Boolean(getAny(raw, 'suspended')),
+      Number(getAny(raw, 'updated_at', 'updatedAt') ?? 0)
+    );
+  }
+}
+
+export class AdminApiKeyInfo {
+  constructor(
+    public id: string,
+    public name: string,
+    public scopes: string[],
+    public createdAt: number,
+    public revokedAt?: number | null
+  ) {}
+
+  static fromRpc(raw: Record<string, unknown>): AdminApiKeyInfo {
+    const revoked = getAny(raw, 'revoked_at', 'revokedAt');
+    return new AdminApiKeyInfo(
+      (getAny(raw, 'id') ?? '') as string,
+      (getAny(raw, 'name') ?? '') as string,
+      ((getAny(raw, 'scopes') ?? []) as string[]).map(String),
+      Number(getAny(raw, 'created_at', 'createdAt') ?? 0),
+      revoked === undefined || revoked === null ? null : Number(revoked)
+    );
+  }
+}
+
+export class AdminApiKeySecret {
+  constructor(
+    public id: string,
+    public name: string,
+    public scopes: string[],
+    public createdAt: number,
+    public apiKey: string
+  ) {}
+
+  static fromRpc(raw: Record<string, unknown>): AdminApiKeySecret {
+    return new AdminApiKeySecret(
+      (getAny(raw, 'id') ?? '') as string,
+      (getAny(raw, 'name') ?? '') as string,
+      ((getAny(raw, 'scopes') ?? []) as string[]).map(String),
+      Number(getAny(raw, 'created_at', 'createdAt') ?? 0),
+      (getAny(raw, 'api_key', 'apiKey') ?? '') as string
+    );
+  }
 }
 
 function getAny<T>(raw: Record<string, unknown>, ...keys: string[]): T | undefined {

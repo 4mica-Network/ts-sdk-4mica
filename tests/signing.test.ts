@@ -23,7 +23,8 @@ describe('PaymentSigner', () => {
       1,
       5,
       1234,
-      null
+      null,
+      7
     );
     await expect(signer.signRequest(buildParams(), claims, SigningScheme.EIP712)).rejects.toThrow(
       SigningError
@@ -40,7 +41,8 @@ describe('PaymentSigner', () => {
       42,
       123,
       999,
-      null
+      null,
+      2
     );
     const sig = await signer.signRequest(buildParams(), claims, SigningScheme.EIP712);
     expect(sig.scheme).toBe(SigningScheme.EIP712);

@@ -46,6 +46,7 @@ function buildTypedMessage(params: CorePublicParameters, claims: PaymentGuarante
         { name: 'user', type: 'address' },
         { name: 'recipient', type: 'address' },
         { name: 'tabId', type: 'uint256' },
+        { name: 'reqId', type: 'uint256' },
         { name: 'amount', type: 'uint256' },
         { name: 'asset', type: 'address' },
         { name: 'timestamp', type: 'uint64' },
@@ -60,21 +61,23 @@ function buildTypedMessage(params: CorePublicParameters, claims: PaymentGuarante
     message: {
       user: claims.userAddress,
       recipient: claims.recipientAddress,
-      tabId: Number(claims.tabId),
-      amount: Number(claims.amount),
+      tabId: claims.tabId,
+      reqId: claims.reqId,
+      amount: claims.amount,
       asset: claims.assetAddress,
-      timestamp: Number(claims.timestamp),
+      timestamp: BigInt(claims.timestamp),
     },
   } as const;
 }
 
 function encodeEip191(claims: PaymentGuaranteeRequestClaims): Uint8Array {
   const payload = AbiCoder.defaultAbiCoder().encode(
-    ['address', 'address', 'uint256', 'uint256', 'address', 'uint64'],
+    ['address', 'address', 'uint256', 'uint256', 'uint256', 'address', 'uint64'],
     [
       claims.userAddress,
       claims.recipientAddress,
       claims.tabId,
+      claims.reqId,
       claims.amount,
       claims.assetAddress,
       claims.timestamp,

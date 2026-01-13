@@ -28,7 +28,7 @@ describe('RpcProxy', () => {
 
   it('surfaces api errors', async () => {
     const fetchMock = vi.fn<FetchFn>(async (input) => {
-      expect(input.toString()).toContain('settlementStatus=unknown');
+      expect(input.toString()).toContain('settlement_status=unknown');
       return new Response(JSON.stringify({ error: 'invalid settlement status: unknown' }), {
         status: 400,
       });

@@ -121,7 +121,8 @@ export class PaymentRequirementsExtra {
 export class TabResponse {
   constructor(
     public tabId: string,
-    public userAddress: string
+    public userAddress: string,
+    public nextReqId?: string | null
   ) {}
 }
 
@@ -181,10 +182,21 @@ export class X402Flow {
 
   async signPayment(
     paymentRequirements: PaymentRequirements,
-    userAddress: string
+    userAddress: string,
+    existingTabId?: bigint | number,
+    existingReqId?: bigint | number
   ): Promise<X402SignedPayment> {
     X402Flow.validateScheme(paymentRequirements.scheme);
-    const tab = await this.requestTab(paymentRequirements, userAddress);
+    let tab: TabResponse;
+    if (existingTabId !== undefined && existingTabId !== null) {
+      tab = new TabResponse(
+        String(existingTabId),
+        userAddress,
+        existingReqId !== undefined && existingReqId !== null ? String(existingReqId) : undefined
+      );
+    } else {
+      tab = await this.requestTab(paymentRequirements, userAddress);
+    }
     const claims = this.buildClaims(paymentRequirements, tab, userAddress);
     const signature = await this.signer.signPayment(claims, SigningScheme.EIP712);
     const envelope = X402Flow.buildEnvelope(paymentRequirements, claims, signature);
@@ -238,7 +250,11 @@ export class X402Flow {
       throw new X402Error(`tab resolution failed: ${resp.status} ${text}`);
     }
     const body = await resp.json();
-    return new TabResponse(body.tabId ?? body.tab_id, body.userAddress ?? body.user_address);
+    return new TabResponse(
+      body.tabId ?? body.tab_id,
+      body.userAddress ?? body.user_address,
+      body.nextReqId ?? body.next_req_id ?? body.reqId ?? body.req_id
+    );
   }
 
   protected buildClaims(
@@ -247,6 +263,8 @@ export class X402Flow {
     userAddress: string
   ): PaymentGuaranteeRequestClaims {
     const tabId = parseU256(tab.tabId);
+    const reqId =
+      tab.nextReqId !== undefined && tab.nextReqId !== null ? parseU256(tab.nextReqId) : 0n;
     const amount = parseU256(requirements.maxAmountRequired);
     if (tab.userAddress.toLowerCase() !== userAddress.toLowerCase()) {
       throw new X402Error(
@@ -260,7 +278,8 @@ export class X402Flow {
       tabId,
       amount,
       timestamp,
-      requirements.asset
+      requirements.asset,
+      reqId
     );
   }
 
@@ -281,6 +300,7 @@ export class X402Flow {
         user_address: claims.userAddress,
         recipient_address: claims.recipientAddress,
         tab_id: `0x${claims.tabId.toString(16)}`,
+        req_id: `0x${claims.reqId.toString(16)}`,
         amount: `0x${claims.amount.toString(16)}`,
         asset_address: claims.assetAddress,
         timestamp: claims.timestamp,

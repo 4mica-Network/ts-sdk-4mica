@@ -1,18 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { PaymentSignature, SigningScheme } from '../src/models';
+import { PaymentGuaranteeRequestClaims, PaymentSignature, SigningScheme } from '../src/models';
 import { PaymentRequirements, TabResponse, X402Flow } from '../src/x402';
 import type { FetchFn } from '../src/rpc';
 import { X402Error } from '../src/errors';
 
 class StubSigner {
-  async signPayment() {
+  async signPayment(_claims: PaymentGuaranteeRequestClaims, _scheme: SigningScheme) {
+    void _claims;
+    void _scheme;
     return { signature: 'deadbeef', scheme: SigningScheme.EIP712 } as PaymentSignature;
   }
 }
 
 class StubX402Flow extends X402Flow {
   protected async requestTab(): Promise<TabResponse> {
-    return new TabResponse('2', '0x0000000000000000000000000000000000000001');
+    return new TabResponse('2', '0x0000000000000000000000000000000000000001', '7');
   }
 }
 
@@ -49,7 +51,9 @@ describe('X402Flow', () => {
     expect(envelope.x402Version).toBe(1);
     expect(envelope.scheme).toBe('4mica+pay');
     expect(envelope.payload.claims.tab_id).toBe('0x2');
+    expect(envelope.payload.claims.req_id).toBe('0x7');
     expect(signed.claims.tabId).toBe(2n);
+    expect(signed.claims.reqId).toBe(7n);
     expect(signed.claims.amount).toBe(5n);
   });
 
@@ -71,7 +75,9 @@ describe('X402Flow', () => {
       if (u.pathname === '/tab') {
         const body = JSON.parse(init?.body as string);
         expect(body.userAddress).toBe(userAddress);
-        return new Response(JSON.stringify({ tabId: '0x1234', userAddress }), { status: 200 });
+        return new Response(JSON.stringify({ tabId: '0x1234', userAddress, nextReqId: '4' }), {
+          status: 200,
+        });
       }
       if (u.pathname === '/settle') {
         const payload = JSON.parse(init?.body as string);
@@ -86,6 +92,7 @@ describe('X402Flow', () => {
     const flow = new X402Flow(new StubSigner(), fetch as FetchFn);
     const payment = await flow.signPayment(requirements, userAddress);
     expect(payment.claims.tabId).toBe(0x1234n);
+    expect(payment.claims.reqId).toBe(4n);
 
     const settled = await flow.settlePayment(payment, requirements, facilitatorUrl);
     expect(settled.settlement.settled).toBe(true);
