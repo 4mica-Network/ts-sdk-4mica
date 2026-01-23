@@ -1,7 +1,9 @@
 import { signatureToWords } from './bls';
+import { AuthSession } from './auth';
+import type { AuthTokens } from './auth';
 import { Config } from './config';
 import { ContractGateway } from './contract';
-import { ClientInitializationError, VerificationError } from './errors';
+import { AuthMissingConfigError, ClientInitializationError, VerificationError } from './errors';
 import { decodeGuaranteeClaims } from './guarantee';
 import {
   AssetBalanceInfo,
@@ -53,6 +55,7 @@ export class Client {
   readonly user: UserClient;
   readonly recipient: RecipientClient;
   readonly signer: PaymentSigner;
+  private authSession?: AuthSession;
 
   private constructor(
     cfg: Config,
@@ -60,13 +63,15 @@ export class Client {
     params: CorePublicParameters,
     gateway: ContractGateway,
     guaranteeDomain: string,
-    signer: PaymentSigner
+    signer: PaymentSigner,
+    authSession?: AuthSession
   ) {
     this.rpc = rpc;
     this.params = params;
     this.gateway = gateway;
     this.guaranteeDomain = guaranteeDomain;
     this.signer = signer;
+    this.authSession = authSession;
     this.user = new UserClient(this);
     this.recipient = new RecipientClient(this);
   }
@@ -78,7 +83,22 @@ export class Client {
     await Client.validateChainId(gateway, params.chainId);
     const guaranteeDomain = await gateway.getGuaranteeDomain();
     const signer = new PaymentSigner(cfg.walletPrivateKey);
-    return new Client(cfg, rpc, params, gateway, guaranteeDomain, signer);
+    const authEnabled =
+      cfg.authUrl !== undefined || cfg.authRefreshMarginSecs !== undefined;
+    const authSession =
+      cfg.bearerToken || !authEnabled
+        ? undefined
+        : new AuthSession({
+            authUrl: cfg.authUrl ?? cfg.rpcUrl,
+            privateKey: cfg.walletPrivateKey,
+            refreshMarginSecs: cfg.authRefreshMarginSecs ?? 60,
+          });
+    if (cfg.bearerToken) {
+      rpc.withBearerToken(cfg.bearerToken);
+    } else if (authSession) {
+      rpc.withTokenProvider(() => authSession.accessToken());
+    }
+    return new Client(cfg, rpc, params, gateway, guaranteeDomain, signer, authSession);
   }
 
   private static buildGateway(cfg: Config, params: CorePublicParameters): ContractGateway {
@@ -106,6 +126,13 @@ export class Client {
 
   async aclose(): Promise<void> {
     await this.rpc.aclose();
+  }
+
+  async login(): Promise<AuthTokens> {
+    if (!this.authSession) {
+      throw new AuthMissingConfigError('auth is not enabled');
+    }
+    return this.authSession.login();
   }
 }
 

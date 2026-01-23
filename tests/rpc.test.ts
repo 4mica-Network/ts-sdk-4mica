@@ -44,4 +44,33 @@ describe('RpcProxy', () => {
     const proxy = new RpcProxy('http://example.com', undefined, fetchMock);
     await expect(proxy.getPublicParams()).rejects.toThrow(RpcError);
   });
+
+  it('adds bearer tokens without double prefixing', async () => {
+    const params = {
+      publicKey: [1, 2, 3],
+      contractAddress: '0x1234567890abcdef1234567890abcdef12345678',
+      ethereumHttpRpcUrl: 'http://localhost:8545',
+      eip712Name: '4mica',
+      eip712Version: '1',
+      chainId: 1337,
+    };
+
+    const fetchRaw = vi.fn<FetchFn>(async (_input, init) => {
+      const headers = init?.headers as Record<string, string>;
+      expect(headers.Authorization).toBe('Bearer token');
+      return new Response(JSON.stringify(params), { status: 200 });
+    });
+    await new RpcProxy('http://example.com', undefined, fetchRaw)
+      .withBearerToken('token')
+      .getPublicParams();
+
+    const fetchPrefixed = vi.fn<FetchFn>(async (_input, init) => {
+      const headers = init?.headers as Record<string, string>;
+      expect(headers.Authorization).toBe('Bearer token');
+      return new Response(JSON.stringify(params), { status: 200 });
+    });
+    await new RpcProxy('http://example.com', undefined, fetchPrefixed)
+      .withBearerToken('Bearer token')
+      .getPublicParams();
+  });
 });

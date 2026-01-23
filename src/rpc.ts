@@ -8,6 +8,7 @@ import { CorePublicParameters } from './signing';
 import { RpcError } from './errors';
 
 export type FetchFn = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+export type BearerTokenProvider = () => string | Promise<string>;
 
 function serializeTabId(tabId: number | bigint): string {
   return `0x${BigInt(tabId).toString(16)}`;
@@ -16,6 +17,8 @@ function serializeTabId(tabId: number | bigint): string {
 export class RpcProxy {
   private baseUrl: string;
   private adminApiKey?: string;
+  private bearerToken?: string;
+  private bearerTokenProvider?: BearerTokenProvider;
   private fetchFn: FetchFn;
 
   constructor(endpoint: string, adminApiKey?: string, fetchFn: FetchFn = fetch) {
@@ -28,12 +31,41 @@ export class RpcProxy {
     // no-op for symmetry with Python SDK
   }
 
-  private headers(): Record<string, string> {
+  withBearerToken(token: string): RpcProxy {
+    this.bearerToken = token;
+    return this;
+  }
+
+  withTokenProvider(provider: BearerTokenProvider): RpcProxy {
+    this.bearerTokenProvider = provider;
+    return this;
+  }
+
+  private async headers(): Promise<Record<string, string>> {
     const headers: Record<string, string> = {};
     if (this.adminApiKey) {
       headers[ADMIN_API_KEY_HEADER] = this.adminApiKey;
     }
+    const token = await this.resolveBearerToken();
+    if (token) {
+      headers['Authorization'] = token;
+    }
     return headers;
+  }
+
+  private async resolveBearerToken(): Promise<string | undefined> {
+    let token = this.bearerToken;
+    if (!token && this.bearerTokenProvider) {
+      token = await this.bearerTokenProvider();
+    }
+    if (!token) {
+      return undefined;
+    }
+    const trimmed = token.trim();
+    if (/^bearer\s+/i.test(trimmed)) {
+      return trimmed;
+    }
+    return `Bearer ${trimmed}`;
   }
 
   private async decode<T>(response: Response): Promise<T> {
@@ -71,7 +103,7 @@ export class RpcProxy {
 
   private async get<T>(path: string): Promise<T> {
     const resp = await this.fetchFn(`${this.baseUrl}${path}`, {
-      headers: this.headers(),
+      headers: await this.headers(),
       method: 'GET',
     });
     return this.decode<T>(resp);
@@ -79,7 +111,7 @@ export class RpcProxy {
 
   private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
     const resp = await this.fetchFn(`${this.baseUrl}${path}`, {
-      headers: { 'content-type': 'application/json', ...this.headers() },
+      headers: { 'content-type': 'application/json', ...(await this.headers()) },
       method: 'POST',
       body: JSON.stringify(body),
     });

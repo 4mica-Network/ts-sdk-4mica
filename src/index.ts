@@ -4,6 +4,7 @@ export * from './utils';
 export * from './models';
 export * from './signing';
 export * from './rpc';
+export * from './auth';
 export * from './contract';
 export * from './guarantee';
 export * from './bls';

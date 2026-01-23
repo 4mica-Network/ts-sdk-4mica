@@ -84,6 +84,32 @@ the BLS certificate to the recipient.
   run();
   ```
 
+  **SIWE auth (optional)**
+
+  ```ts
+  import { Client, ConfigBuilder } from "sdk-4mica";
+
+  const cfg = new ConfigBuilder()
+    .walletPrivateKey("0x...")
+    .rpcUrl("https://api.4mica.xyz/")
+    .enableAuth()
+    .build();
+
+  const client = await Client.new(cfg);
+  await client.login(); // optional: first RPC call also triggers auth
+  ```
+
+  Or pass a static bearer token:
+
+  ```ts
+  const cfg = new ConfigBuilder()
+    .walletPrivateKey("0x...")
+    .bearerToken("Bearer <access_token>")
+    .build();
+  ```
+
+  Env vars: `4MICA_BEARER_TOKEN`, `4MICA_AUTH_URL`, `4MICA_AUTH_REFRESH_MARGIN_SECS`.
+
 - Rust SDK: `cargo add rust-sdk-4mica` and call
   `X402Flow::sign_payment(requirements, user_address)` to obtain the same `payment.header` for the
   retry request.
