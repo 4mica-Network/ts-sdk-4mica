@@ -83,8 +83,7 @@ export class Client {
     await Client.validateChainId(gateway, params.chainId);
     const guaranteeDomain = await gateway.getGuaranteeDomain();
     const signer = new PaymentSigner(cfg.walletPrivateKey);
-    const authEnabled =
-      cfg.authUrl !== undefined || cfg.authRefreshMarginSecs !== undefined;
+    const authEnabled = cfg.authUrl !== undefined || cfg.authRefreshMarginSecs !== undefined;
     const authSession =
       cfg.bearerToken || !authEnabled
         ? undefined

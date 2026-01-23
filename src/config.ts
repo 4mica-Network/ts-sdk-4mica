@@ -122,7 +122,7 @@ export class ConfigBuilder {
         contractAddress,
         adminApiKey: this._adminApiKey,
         bearerToken: this._bearerToken,
-        authUrl: authEnabled ? authUrl ?? rpcUrl : undefined,
+        authUrl: authEnabled ? (authUrl ?? rpcUrl) : undefined,
         authRefreshMarginSecs: authEnabled ? refreshMargin : undefined,
       };
     } catch (err) {

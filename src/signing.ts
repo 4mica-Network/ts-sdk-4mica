@@ -132,7 +132,12 @@ export function validateGuaranteeTypedData(
   }
 
   const types = payload.types;
-  if (!fieldsMatch(types.SolGuaranteeRequestClaimsV1, GUARANTEE_EIP712_TYPES.SolGuaranteeRequestClaimsV1)) {
+  if (
+    !fieldsMatch(
+      types.SolGuaranteeRequestClaimsV1,
+      GUARANTEE_EIP712_TYPES.SolGuaranteeRequestClaimsV1
+    )
+  ) {
     throw new ValidationError('Unexpected struct fields for SolGuaranteeRequestClaimsV1');
   }
 

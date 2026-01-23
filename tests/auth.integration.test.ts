@@ -7,8 +7,7 @@ import { RpcError } from '../src/errors';
 
 const DEFAULT_RPC_URL = 'http://127.0.0.1:3000';
 const DEFAULT_AUTH_URL = 'http://127.0.0.1:3000';
-const DEFAULT_PAYER_KEY =
-  '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+const DEFAULT_PAYER_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 
 const integrationEnabled = process.env['4MICA_INTEGRATION'] === '1';
 const describeIntegration = integrationEnabled ? describe : describe.skip;
@@ -17,12 +16,9 @@ const resolveRpcUrl = (): string => process.env['4MICA_RPC_URL'] ?? DEFAULT_RPC_
 const resolveAuthUrl = (rpcUrl: string): string =>
   process.env['4MICA_AUTH_URL'] ?? rpcUrl ?? DEFAULT_AUTH_URL;
 const resolvePrivateKey = (): string =>
-  process.env['PAYER_KEY'] ??
-  process.env['4MICA_WALLET_PRIVATE_KEY'] ??
-  DEFAULT_PAYER_KEY;
+  process.env['PAYER_KEY'] ?? process.env['4MICA_WALLET_PRIVATE_KEY'] ?? DEFAULT_PAYER_KEY;
 
-const isUnauthorized = (err: unknown): boolean =>
-  err instanceof RpcError && err.status === 401;
+const isUnauthorized = (err: unknown): boolean => err instanceof RpcError && err.status === 401;
 
 const resolveBearerToken = async (authUrl: string, privateKey: string): Promise<string> => {
   const token = process.env['4MICA_BEARER_TOKEN'];
