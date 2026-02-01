@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { PaymentGuaranteeRequestClaims, PaymentSignature, SigningScheme } from '../src/models';
-import { PaymentRequirements, TabResponse, X402Flow } from '../src/x402';
+import { PaymentRequirementsV1, PaymentRequirementsV2, X402PaymentRequired, TabResponse, X402Flow } from '../src/x402';
 import type { FetchFn } from '../src/rpc';
 import { X402Error } from '../src/errors';
+
+const SCHEME = '4mica-credit'
 
 class StubSigner {
   async signPayment(_claims: PaymentGuaranteeRequestClaims, _scheme: SigningScheme) {
@@ -14,21 +16,25 @@ class StubSigner {
 
 class StubX402Flow extends X402Flow {
   protected async requestTab(): Promise<TabResponse> {
-    return new TabResponse('2', '0x0000000000000000000000000000000000000001', '7');
+    return {
+      tabId: '2',
+      userAddress: '0x0000000000000000000000000000000000000001',
+      nextReqId: '7'
+    };
   }
 }
 
 describe('X402Flow', () => {
   it('rejects invalid scheme', async () => {
     const flow = new StubX402Flow(new StubSigner());
-    const requirements = new PaymentRequirements(
-      'http+pay',
-      'testnet',
-      '1',
-      '0x0000000000000000000000000000000000000003',
-      '0x0000000000000000000000000000000000000000',
-      { tabEndpoint: 'https://example.com' }
-    );
+    const requirements: PaymentRequirementsV1 = {
+      scheme: 'http+pay',
+      network: 'testnet',
+      maxAmountRequired: '1',
+      payTo: '0x0000000000000000000000000000000000000003',
+      asset: '0x0000000000000000000000000000000000000000',
+      extra: { tabEndpoint: 'https://example.com' }
+    };
     await expect(
       flow.signPayment(requirements, '0x0000000000000000000000000000000000000001')
     ).rejects.toThrow(X402Error);
@@ -36,39 +42,77 @@ describe('X402Flow', () => {
 
   it('builds header and payload', async () => {
     const flow = new StubX402Flow(new StubSigner());
-    const requirements = new PaymentRequirements(
-      '4mica+pay',
-      'testnet',
-      '5',
-      '0x0000000000000000000000000000000000000003',
-      '0x0000000000000000000000000000000000000000',
-      { tabEndpoint: 'https://example.com' }
-    );
+    const requirements: PaymentRequirementsV1 = {
+      scheme: SCHEME,
+      network: 'testnet',
+      maxAmountRequired: '5',
+      payTo: '0x0000000000000000000000000000000000000003',
+      asset: '0x0000000000000000000000000000000000000000',
+      extra: { tabEndpoint: 'https://example.com' }
+    };
     const userAddress = '0x0000000000000000000000000000000000000001';
     const signed = await flow.signPayment(requirements, userAddress);
     const decoded = Buffer.from(signed.header, 'base64').toString('utf8');
     const envelope = JSON.parse(decoded);
+
     expect(envelope.x402Version).toBe(1);
-    expect(envelope.scheme).toBe('4mica+pay');
+    expect(envelope.scheme).toBe(SCHEME);
     expect(envelope.payload.claims.tab_id).toBe('0x2');
     expect(envelope.payload.claims.req_id).toBe('0x7');
-    expect(signed.claims.tabId).toBe(2n);
-    expect(signed.claims.reqId).toBe(7n);
-    expect(signed.claims.amount).toBe(5n);
+
+    expect(signed.payload.claims.tab_id).toBe('0x2');
+    expect(signed.payload.claims.req_id).toBe('0x7');
+    expect(signed.payload.claims.amount).toBe('0x5');
+  });
+
+  it('builds header and payload for V2', async () => {
+    const flow = new StubX402Flow(new StubSigner());
+    const accepted: PaymentRequirementsV2 = {
+      scheme: SCHEME,
+      network: 'testnet',
+      amount: '10',
+      payTo: '0x0000000000000000000000000000000000000003',
+      asset: '0x0000000000000000000000000000000000000000',
+      extra: { tabEndpoint: 'https://example.com' }
+    };
+    const paymentRequired: X402PaymentRequired = {
+      x402Version: 2,
+      resource: {
+        url: 'https://api.example.com/data',
+        description: 'Premium data access',
+        mimeType: 'application/json'
+      },
+      accepts: [accepted]
+    };
+    const userAddress = '0x0000000000000000000000000000000000000001';
+    const signed = await flow.signPaymentV2(paymentRequired, accepted, userAddress);
+    const decoded = Buffer.from(signed.header, 'base64').toString('utf8');
+    const envelope = JSON.parse(decoded);
+
+    expect(envelope.x402Version).toBe(2);
+    expect(envelope.accepted.scheme).toBe(SCHEME);
+    expect(envelope.accepted.amount).toBe('10');
+    expect(envelope.resource.url).toBe('https://api.example.com/data');
+    expect(envelope.payload.claims.tab_id).toBe('0x2');
+    expect(envelope.payload.claims.req_id).toBe('0x7');
+
+    expect(signed.payload.claims.tab_id).toBe('0x2');
+    expect(signed.payload.claims.req_id).toBe('0x7');
+    expect(signed.payload.claims.amount).toBe('0xa');
   });
 
   it('settles payment through facilitator', async () => {
     const userAddress = '0x0000000000000000000000000000000000000009';
     const tabEndpoint = 'http://facilitator.test/tab';
     const facilitatorUrl = 'http://facilitator.test';
-    const requirements = new PaymentRequirements(
-      '4mica+pay',
-      'testnet',
-      '5',
-      '0x00000000000000000000000000000000000000ff',
-      '0x0000000000000000000000000000000000000000',
-      { tabEndpoint }
-    );
+    const requirements: PaymentRequirementsV1 = {
+      scheme: SCHEME,
+      network: 'testnet',
+      maxAmountRequired: '5',
+      payTo: '0x00000000000000000000000000000000000000ff',
+      asset: '0x0000000000000000000000000000000000000000',
+      extra: { tabEndpoint }
+    };
 
     const fetch = async (url: string, init?: RequestInit) => {
       const u = new URL(url);
@@ -91,12 +135,12 @@ describe('X402Flow', () => {
 
     const flow = new X402Flow(new StubSigner(), fetch as FetchFn);
     const payment = await flow.signPayment(requirements, userAddress);
-    expect(payment.claims.tabId).toBe(0x1234n);
-    expect(payment.claims.reqId).toBe(4n);
+    expect(payment.payload.claims.tab_id).toBe('0x1234');
+    expect(payment.payload.claims.req_id).toBe('0x4');
 
     const settled = await flow.settlePayment(payment, requirements, facilitatorUrl);
-    expect(settled.settlement.settled).toBe(true);
-    expect(settled.settlement.networkId).toBe(requirements.network);
-    expect(settled.payment.claims.recipientAddress).toBe(requirements.payTo);
+    expect((settled.settlement as any).settled).toBe(true);
+    expect((settled.settlement as any).networkId).toBe(requirements.network);
+    expect(settled.payment.payload.claims.recipient_address).toBe(requirements.payTo);
   });
 });

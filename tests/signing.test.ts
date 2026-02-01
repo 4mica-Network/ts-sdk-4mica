@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PaymentGuaranteeRequestClaims, SigningScheme } from '../src/models';
-import { CorePublicParameters, PaymentSigner } from '../src/signing';
+import { CorePublicParameters, createLocalSigner, PaymentSigner } from '../src/signing';
 import { SigningError } from '../src/errors';
 
 function buildParams(): CorePublicParameters {
@@ -16,7 +16,7 @@ function buildParams(): CorePublicParameters {
 
 describe('PaymentSigner', () => {
   it('rejects address mismatch', async () => {
-    const signer = new PaymentSigner('11'.repeat(32));
+    const signer = new PaymentSigner(createLocalSigner('11'.repeat(32)));
     const claims = PaymentGuaranteeRequestClaims.new(
       '0x0000000000000000000000000000000000000011',
       '0x0000000000000000000000000000000000000002',
@@ -33,8 +33,9 @@ describe('PaymentSigner', () => {
 
   it('produces eip712 signature', async () => {
     const privateKey = '0x59c6995e998f97a5a0044976f7be35d5ad91c0cfa55b5cfb20b07a1c60f4c5bc';
-    const signer = new PaymentSigner(privateKey);
-    const accountAddress = (await signer['wallet'].getAddress()).toLowerCase();
+    const localSigner = createLocalSigner(privateKey);
+    const signer = new PaymentSigner(localSigner);
+    const accountAddress = localSigner.address.toLowerCase();
     const claims = PaymentGuaranteeRequestClaims.new(
       accountAddress,
       '0x0000000000000000000000000000000000000002',
