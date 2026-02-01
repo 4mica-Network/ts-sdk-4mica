@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { PaymentGuaranteeRequestClaims, PaymentSignature, SigningScheme } from '../src/models';
-import { PaymentRequirementsV1, PaymentRequirementsV2, X402PaymentRequired, TabResponse, X402Flow } from '../src/x402';
+import {
+  PaymentRequirementsV1,
+  PaymentRequirementsV2,
+  X402PaymentRequired,
+  TabResponse,
+  X402Flow,
+} from '../src/x402';
 import type { FetchFn } from '../src/rpc';
 import { X402Error } from '../src/errors';
 
-const SCHEME = '4mica-credit'
+const SCHEME = '4mica-credit';
 
 class StubSigner {
   async signPayment(_claims: PaymentGuaranteeRequestClaims, _scheme: SigningScheme) {
@@ -19,7 +25,7 @@ class StubX402Flow extends X402Flow {
     return {
       tabId: '2',
       userAddress: '0x0000000000000000000000000000000000000001',
-      nextReqId: '7'
+      nextReqId: '7',
     };
   }
 }
@@ -33,7 +39,7 @@ describe('X402Flow', () => {
       maxAmountRequired: '1',
       payTo: '0x0000000000000000000000000000000000000003',
       asset: '0x0000000000000000000000000000000000000000',
-      extra: { tabEndpoint: 'https://example.com' }
+      extra: { tabEndpoint: 'https://example.com' },
     };
     await expect(
       flow.signPayment(requirements, '0x0000000000000000000000000000000000000001')
@@ -48,7 +54,7 @@ describe('X402Flow', () => {
       maxAmountRequired: '5',
       payTo: '0x0000000000000000000000000000000000000003',
       asset: '0x0000000000000000000000000000000000000000',
-      extra: { tabEndpoint: 'https://example.com' }
+      extra: { tabEndpoint: 'https://example.com' },
     };
     const userAddress = '0x0000000000000000000000000000000000000001';
     const signed = await flow.signPayment(requirements, userAddress);
@@ -73,16 +79,16 @@ describe('X402Flow', () => {
       amount: '10',
       payTo: '0x0000000000000000000000000000000000000003',
       asset: '0x0000000000000000000000000000000000000000',
-      extra: { tabEndpoint: 'https://example.com' }
+      extra: { tabEndpoint: 'https://example.com' },
     };
     const paymentRequired: X402PaymentRequired = {
       x402Version: 2,
       resource: {
         url: 'https://api.example.com/data',
         description: 'Premium data access',
-        mimeType: 'application/json'
+        mimeType: 'application/json',
       },
-      accepts: [accepted]
+      accepts: [accepted],
     };
     const userAddress = '0x0000000000000000000000000000000000000001';
     const signed = await flow.signPaymentV2(paymentRequired, accepted, userAddress);
@@ -111,7 +117,7 @@ describe('X402Flow', () => {
       maxAmountRequired: '5',
       payTo: '0x00000000000000000000000000000000000000ff',
       asset: '0x0000000000000000000000000000000000000000',
-      extra: { tabEndpoint }
+      extra: { tabEndpoint },
     };
 
     const fetch = async (url: string, init?: RequestInit) => {
