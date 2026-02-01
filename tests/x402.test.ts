@@ -145,8 +145,8 @@ describe('X402Flow', () => {
     expect(payment.payload.claims.req_id).toBe('0x4');
 
     const settled = await flow.settlePayment(payment, requirements, facilitatorUrl);
-    expect((settled.settlement as any).settled).toBe(true);
-    expect((settled.settlement as any).networkId).toBe(requirements.network);
+    expect((settled.settlement as Record<string, unknown>).settled).toBe(true);
+    expect((settled.settlement as Record<string, unknown>).networkId).toBe(requirements.network);
     expect(settled.payment.payload.claims.recipient_address).toBe(requirements.payTo);
   });
 });

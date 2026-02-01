@@ -1,4 +1,3 @@
-import { Wallet } from 'ethers';
 import type { FetchFn } from './rpc';
 import {
   AuthApiError,
@@ -8,7 +7,7 @@ import {
   AuthTransportError,
   AuthUrlError,
 } from './errors';
-import { ValidationError, normalizePrivateKey, validateUrl } from './utils';
+import { ValidationError, validateUrl } from './utils';
 import { EvmSigner } from './signing';
 
 export type AuthTokens = {
