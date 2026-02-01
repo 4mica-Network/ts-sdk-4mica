@@ -1,4 +1,3 @@
-import { Wallet } from 'ethers';
 import type { FetchFn } from './rpc';
 import {
   AuthApiError,
@@ -8,7 +7,8 @@ import {
   AuthTransportError,
   AuthUrlError,
 } from './errors';
-import { ValidationError, normalizePrivateKey, validateUrl } from './utils';
+import { ValidationError, validateUrl } from './utils';
+import { EvmSigner } from './signing';
 
 export type AuthTokens = {
   accessToken: string;
@@ -201,7 +201,7 @@ export class AuthClient {
 
 export class AuthSession {
   private authClient: AuthClient;
-  private wallet: Wallet;
+  private signer: EvmSigner;
   private refreshMarginSecs: number;
   private tokens?: { accessToken: string; refreshToken: string; expiresAt: number };
   private inFlight?: Promise<string>;
@@ -209,7 +209,7 @@ export class AuthSession {
 
   constructor(options: {
     authUrl: string;
-    privateKey: string;
+    signer: EvmSigner;
     refreshMarginSecs?: number;
     fetchFn?: FetchFn;
   }) {
@@ -217,16 +217,7 @@ export class AuthSession {
       throw new AuthMissingConfigError('missing auth_url');
     }
     this.authClient = new AuthClient(options.authUrl, options.fetchFn);
-
-    try {
-      const normalizedKey = normalizePrivateKey(options.privateKey);
-      this.wallet = new Wallet(normalizedKey);
-    } catch (err) {
-      if (err instanceof ValidationError) {
-        throw new AuthConfigError(err.message);
-      }
-      throw err;
-    }
+    this.signer = options.signer;
 
     const margin = options.refreshMarginSecs ?? 60;
     if (!Number.isFinite(margin) || margin < 0) {
@@ -288,7 +279,7 @@ export class AuthSession {
   }
 
   private async performLogin(): Promise<AuthTokens> {
-    const address = this.wallet.address;
+    const address = this.signer.address;
     const nonce = await this.authClient.getNonce(address);
     const message = buildSiweMessage({
       domain: nonce.siwe.domain,
@@ -300,7 +291,7 @@ export class AuthSession {
       issuedAt: nonce.siwe.issuedAt,
       expiration: nonce.siwe.expiration,
     });
-    const signature = await this.wallet.signMessage(message);
+    const signature = await this.signer.signMessage({ message });
     const tokens = await this.authClient.verify(address, message, signature);
     this.cacheTokens(tokens);
     return tokens;

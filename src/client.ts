@@ -58,7 +58,6 @@ export class Client {
   private authSession?: AuthSession;
 
   private constructor(
-    cfg: Config,
     rpc: RpcProxy,
     params: CorePublicParameters,
     gateway: ContractGateway,
@@ -82,22 +81,23 @@ export class Client {
     const gateway = Client.buildGateway(cfg, params);
     await Client.validateChainId(gateway, params.chainId);
     const guaranteeDomain = await gateway.getGuaranteeDomain();
-    const signer = new PaymentSigner(cfg.walletPrivateKey);
+    const signer = new PaymentSigner(cfg.signer);
     const authEnabled = cfg.authUrl !== undefined || cfg.authRefreshMarginSecs !== undefined;
     const authSession =
       cfg.bearerToken || !authEnabled
         ? undefined
         : new AuthSession({
             authUrl: cfg.authUrl ?? cfg.rpcUrl,
-            privateKey: cfg.walletPrivateKey,
+            signer: cfg.signer,
             refreshMarginSecs: cfg.authRefreshMarginSecs ?? 60,
           });
+
     if (cfg.bearerToken) {
       rpc.withBearerToken(cfg.bearerToken);
     } else if (authSession) {
       rpc.withTokenProvider(() => authSession.accessToken());
     }
-    return new Client(cfg, rpc, params, gateway, guaranteeDomain, signer, authSession);
+    return new Client(rpc, params, gateway, guaranteeDomain, signer, authSession);
   }
 
   private static buildGateway(cfg: Config, params: CorePublicParameters): ContractGateway {

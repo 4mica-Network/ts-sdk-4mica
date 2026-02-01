@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AuthClient, AuthSession, buildSiweMessage } from '../src/auth';
 import { AuthApiError, AuthConfigError, AuthDecodeError, AuthTransportError } from '../src/errors';
 import type { FetchFn } from '../src/rpc';
+import { createLocalSigner, ValidationError } from '../src';
 
 const PRIVATE_KEY = '0x59c6995e998f97a5a0044976f7be35d5ad91c0cfa55b5cfb20b07a1c60f4c5bc';
 
@@ -152,7 +153,7 @@ describe('AuthSession', () => {
 
       const session = new AuthSession({
         authUrl: 'https://auth.example.com',
-        privateKey: PRIVATE_KEY,
+        signer: createLocalSigner(PRIVATE_KEY),
         refreshMarginSecs: 30,
         fetchFn: fetchMock,
       });
@@ -212,7 +213,7 @@ describe('AuthSession', () => {
 
       const session = new AuthSession({
         authUrl: 'https://auth.example.com',
-        privateKey: PRIVATE_KEY,
+        signer: createLocalSigner(PRIVATE_KEY),
         refreshMarginSecs: 0,
         fetchFn: fetchMock,
       });
@@ -259,7 +260,7 @@ describe('AuthSession', () => {
 
     const session = new AuthSession({
       authUrl: 'https://auth.example.com',
-      privateKey: PRIVATE_KEY,
+      signer: createLocalSigner(PRIVATE_KEY),
       fetchFn: fetchMock,
     });
 
@@ -275,15 +276,15 @@ describe('AuthSession', () => {
       () =>
         new AuthSession({
           authUrl: 'https://auth.example.com',
-          privateKey: '0x1234',
+          signer: createLocalSigner('0x1234'),
         })
-    ).toThrow(AuthConfigError);
+    ).toThrow(ValidationError);
 
     expect(
       () =>
         new AuthSession({
           authUrl: 'https://auth.example.com',
-          privateKey: PRIVATE_KEY,
+          signer: createLocalSigner(PRIVATE_KEY),
           refreshMarginSecs: -1,
         })
     ).toThrow(AuthConfigError);

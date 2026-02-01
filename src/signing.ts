@@ -1,7 +1,48 @@
 import { AbiCoder, Wallet, getBytes } from 'ethers';
 import { SigningError } from './errors';
 import { PaymentGuaranteeRequestClaims, PaymentSignature, SigningScheme } from './models';
-import { ValidationError, normalizeAddress } from './utils';
+import { ValidationError, normalizeAddress, normalizePrivateKey } from './utils';
+
+/**
+ * ClientEvmSigner - Used by x402 clients to sign payment authorizations
+ * This is typically a LocalAccount or wallet that holds private keys
+ * and can sign EIP-712 typed data for payment authorizations
+ */
+export type EvmSigner = {
+  readonly address: `0x${string}`;
+
+  signTypedData(message: {
+    domain: Record<string, unknown>;
+    types: Record<string, unknown>;
+    primaryType: string;
+    message: Record<string, unknown>;
+  }): Promise<`0x${string}`>;
+
+  signMessage(message: { message: string }): Promise<`0x${string}`>;
+};
+
+export function createLocalSigner(privateKey: string): EvmSigner {
+  privateKey = normalizePrivateKey(privateKey);
+  const wallet = new Wallet(privateKey);
+  return {
+    address: wallet.address as `0x${string}`,
+    signTypedData: async (message) => {
+      const signature = await wallet.signTypedData(
+        message.domain,
+        { [message.primaryType]: message.types[message.primaryType] } as Record<
+          string,
+          Array<{ name: string; type: string }>
+        >,
+        message.message
+      );
+      return signature as `0x${string}`;
+    },
+    signMessage: async ({ message }) => {
+      const signature = await wallet.signMessage(message);
+      return signature as `0x${string}`;
+    },
+  };
+}
 
 export class CorePublicParameters {
   constructor(
@@ -232,7 +273,7 @@ export function buildGuaranteeTypedData(
   } as const;
 }
 
-export function encodeGuaranteeEip191(claims: PaymentGuaranteeRequestClaims): Uint8Array {
+export function encodeGuaranteeEip191(claims: PaymentGuaranteeRequestClaims): string {
   const payload = AbiCoder.defaultAbiCoder().encode(
     ['address', 'address', 'uint256', 'uint256', 'uint256', 'address', 'uint64'],
     [
@@ -245,14 +286,14 @@ export function encodeGuaranteeEip191(claims: PaymentGuaranteeRequestClaims): Ui
       claims.timestamp,
     ]
   );
-  return getBytes(payload);
+  return payload;
 }
 
 export class PaymentSigner {
-  private wallet: Wallet;
+  private signer: EvmSigner;
 
-  constructor(privateKey: string) {
-    this.wallet = new Wallet(privateKey);
+  constructor(signer: EvmSigner) {
+    this.signer = signer;
   }
 
   async signRequest(
@@ -261,20 +302,20 @@ export class PaymentSigner {
     scheme: SigningScheme = SigningScheme.EIP712
   ): Promise<PaymentSignature> {
     try {
-      validateGuaranteeSigningContext(params, claims, { signerAddress: this.wallet.address });
+      validateGuaranteeSigningContext(params, claims, { signerAddress: this.signer.address });
       if (scheme === SigningScheme.EIP712) {
         const typed = buildGuaranteeTypedData(params, claims);
-        const claimsTypes = [...typed.types.SolGuaranteeRequestClaimsV1];
-        const signature = await this.wallet.signTypedData(
-          typed.domain,
-          { SolGuaranteeRequestClaimsV1: claimsTypes },
-          typed.message
-        );
+        const signature = await this.signer.signTypedData({
+          domain: typed.domain,
+          types: { SolGuaranteeRequestClaimsV1: typed.types.SolGuaranteeRequestClaimsV1 },
+          primaryType: typed.primaryType,
+          message: typed.message,
+        });
         return { signature, scheme };
       }
       if (scheme === SigningScheme.EIP191) {
         const message = encodeGuaranteeEip191(claims);
-        const signature = await this.wallet.signMessage(message);
+        const signature = await this.signer.signMessage({ message });
         return { signature, scheme };
       }
       throw new SigningError(`unsupported signing scheme: ${scheme}`);

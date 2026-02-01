@@ -1,9 +1,11 @@
 import { ConfigError } from './errors';
+import { createLocalSigner, EvmSigner } from './signing';
 import { ValidationError, normalizeAddress, normalizePrivateKey, validateUrl } from './utils';
 
 export interface Config {
   rpcUrl: string;
   walletPrivateKey: string;
+  signer: EvmSigner;
   ethereumHttpRpcUrl?: string;
   contractAddress?: string;
   adminApiKey?: string;
@@ -15,6 +17,7 @@ export interface Config {
 export class ConfigBuilder {
   private _rpcUrl: string | undefined = 'http://127.0.0.1:3000';
   private _walletPrivateKey: string | undefined;
+  private _signer: EvmSigner | undefined;
   private _ethereumHttpRpcUrl?: string;
   private _contractAddress?: string;
   private _adminApiKey?: string;
@@ -30,6 +33,11 @@ export class ConfigBuilder {
 
   walletPrivateKey(value: string): ConfigBuilder {
     this._walletPrivateKey = value;
+    return this;
+  }
+
+  signer(value: EvmSigner): ConfigBuilder {
+    this._signer = value;
     return this;
   }
 
@@ -91,8 +99,8 @@ export class ConfigBuilder {
   }
 
   build(): Config {
-    if (!this._walletPrivateKey) {
-      throw new ConfigError('missing wallet_private_key');
+    if (!this._signer && !this._walletPrivateKey) {
+      throw new ConfigError('missing signer or wallet_private_key');
     }
     if (!this._rpcUrl) {
       throw new ConfigError('missing rpc_url');
@@ -100,7 +108,12 @@ export class ConfigBuilder {
 
     try {
       const rpcUrl = validateUrl(this._rpcUrl);
-      const walletPrivateKey = normalizePrivateKey(this._walletPrivateKey);
+      const walletPrivateKey = this._walletPrivateKey
+        ? normalizePrivateKey(this._walletPrivateKey)
+        : undefined;
+
+      const signer: EvmSigner = this._signer ?? createLocalSigner(walletPrivateKey!);
+
       const ethereumHttpRpcUrl = this._ethereumHttpRpcUrl
         ? validateUrl(this._ethereumHttpRpcUrl)
         : undefined;
@@ -117,7 +130,8 @@ export class ConfigBuilder {
 
       return {
         rpcUrl,
-        walletPrivateKey,
+        walletPrivateKey: walletPrivateKey ?? signer.address,
+        signer,
         ethereumHttpRpcUrl,
         contractAddress,
         adminApiKey: this._adminApiKey,

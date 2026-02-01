@@ -8,5 +8,5 @@ export * from './auth';
 export * from './contract';
 export * from './guarantee';
 export * from './bls';
-export * from './x402';
+export * from './x402/index';
 export * from './client';
