@@ -1,3 +1,4 @@
+import { Account } from 'viem';
 import type { FetchFn } from './rpc';
 import {
   AuthApiError,
@@ -6,9 +7,9 @@ import {
   AuthMissingConfigError,
   AuthTransportError,
   AuthUrlError,
+  SigningError,
 } from './errors';
 import { ValidationError, validateUrl } from './utils';
-import { EvmSigner } from './signing';
 
 export type AuthTokens = {
   accessToken: string;
@@ -201,7 +202,7 @@ export class AuthClient {
 
 export class AuthSession {
   private authClient: AuthClient;
-  private signer: EvmSigner;
+  private signer: Account;
   private refreshMarginSecs: number;
   private tokens?: { accessToken: string; refreshToken: string; expiresAt: number };
   private inFlight?: Promise<string>;
@@ -209,7 +210,7 @@ export class AuthSession {
 
   constructor(options: {
     authUrl: string;
-    signer: EvmSigner;
+    signer: Account;
     refreshMarginSecs?: number;
     fetchFn?: FetchFn;
   }) {
@@ -291,6 +292,9 @@ export class AuthSession {
       issuedAt: nonce.siwe.issuedAt,
       expiration: nonce.siwe.expiration,
     });
+    if (!this.signer.signMessage) {
+      throw new SigningError('signMessage is not supported for this account');
+    }
     const signature = await this.signer.signMessage({ message });
     const tokens = await this.authClient.verify(address, message, signature);
     this.cacheTokens(tokens);

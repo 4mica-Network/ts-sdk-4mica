@@ -1,25 +1,23 @@
-import { AbiCoder, getBytes } from 'ethers';
+import { toBytes, encodeAbiParameters, decodeAbiParameters, type Hex } from 'viem';
 import { VerificationError } from './errors';
 import { PaymentGuaranteeClaims } from './models';
-import { parseU256 } from './utils';
+import { parseU256, hexFromBytes } from './utils';
 
 const CLAIM_TYPES = [
-  'bytes32',
-  'uint256',
-  'uint256',
-  'address',
-  'address',
-  'uint256',
-  'uint256',
-  'address',
-  'uint64',
-  'uint64',
-];
-
-const coder = AbiCoder.defaultAbiCoder();
+  { type: 'bytes32' },
+  { type: 'uint256' },
+  { type: 'uint256' },
+  { type: 'address' },
+  { type: 'address' },
+  { type: 'uint256' },
+  { type: 'uint256' },
+  { type: 'address' },
+  { type: 'uint64' },
+  { type: 'uint64' },
+] as const;
 
 function ensureDomainBytes(domain: string | Uint8Array): Uint8Array {
-  const bytes = typeof domain === 'string' ? getBytes(domain) : domain;
+  const bytes = typeof domain === 'string' ? toBytes(domain) : domain;
   if (bytes.length !== 32) {
     throw new VerificationError('domain separator must be 32 bytes');
   }
@@ -32,27 +30,27 @@ export function encodeGuaranteeClaims(claims: PaymentGuaranteeClaims): string {
   }
 
   const domain = ensureDomainBytes(claims.domain);
-  const encoded = coder.encode(CLAIM_TYPES, [
-    domain,
+  const encoded = encodeAbiParameters(CLAIM_TYPES, [
+    hexFromBytes(domain),
     parseU256(claims.tabId),
     parseU256(claims.reqId),
-    claims.userAddress,
-    claims.recipientAddress,
+    claims.userAddress as Hex,
+    claims.recipientAddress as Hex,
     parseU256(claims.amount),
     parseU256(claims.totalAmount),
-    claims.assetAddress,
+    claims.assetAddress as Hex,
     BigInt(claims.timestamp),
     BigInt(claims.version),
   ]);
-  return coder.encode(['uint64', 'bytes'], [BigInt(claims.version), encoded]);
+  return encodeAbiParameters(
+    [{ type: 'uint64' }, { type: 'bytes' }],
+    [BigInt(claims.version), encoded]
+  );
 }
 
 export function decodeGuaranteeClaims(data: string | Uint8Array): PaymentGuaranteeClaims {
-  const rawBytes = typeof data === 'string' ? getBytes(data) : data;
-  const [version, encoded] = coder.decode(['uint64', 'bytes'], rawBytes) as unknown as [
-    bigint,
-    string,
-  ];
+  const rawBytes = typeof data === 'string' ? toBytes(data) : data;
+  const [version, encoded] = decodeAbiParameters([{ type: 'uint64' }, { type: 'bytes' }], rawBytes);
   if (version !== 1n) {
     throw new VerificationError(`unsupported guarantee claims version: ${version}`);
   }
@@ -68,28 +66,17 @@ export function decodeGuaranteeClaims(data: string | Uint8Array): PaymentGuarant
     asset,
     timestamp,
     claimsVersion,
-  ] = coder.decode(CLAIM_TYPES, encoded) as unknown as [
-    string,
-    bigint,
-    bigint,
-    string,
-    string,
-    bigint,
-    bigint,
-    string,
-    bigint,
-    bigint,
-  ];
+  ] = decodeAbiParameters(CLAIM_TYPES, encoded as Hex);
 
   return {
-    domain: getBytes(domain),
-    userAddress: user,
-    recipientAddress: recipient,
+    domain: toBytes(domain as Hex),
+    userAddress: user as string,
+    recipientAddress: recipient as string,
     tabId: parseU256(tabId),
     reqId: parseU256(reqId),
     amount: parseU256(amount),
     totalAmount: parseU256(totalAmount),
-    assetAddress: asset,
+    assetAddress: asset as string,
     timestamp: Number(timestamp),
     version: Number(claimsVersion),
   };

@@ -1,8 +1,9 @@
+import { Hex } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import { describe, expect, it, vi } from 'vitest';
 import { AuthClient, AuthSession, buildSiweMessage } from '../src/auth';
 import { AuthApiError, AuthConfigError, AuthDecodeError, AuthTransportError } from '../src/errors';
 import type { FetchFn } from '../src/rpc';
-import { createLocalSigner, ValidationError } from '../src';
 
 const PRIVATE_KEY = '0x59c6995e998f97a5a0044976f7be35d5ad91c0cfa55b5cfb20b07a1c60f4c5bc';
 
@@ -153,7 +154,7 @@ describe('AuthSession', () => {
 
       const session = new AuthSession({
         authUrl: 'https://auth.example.com',
-        signer: createLocalSigner(PRIVATE_KEY),
+        signer: privateKeyToAccount(PRIVATE_KEY as Hex),
         refreshMarginSecs: 30,
         fetchFn: fetchMock,
       });
@@ -213,7 +214,7 @@ describe('AuthSession', () => {
 
       const session = new AuthSession({
         authUrl: 'https://auth.example.com',
-        signer: createLocalSigner(PRIVATE_KEY),
+        signer: privateKeyToAccount(PRIVATE_KEY as Hex),
         refreshMarginSecs: 0,
         fetchFn: fetchMock,
       });
@@ -260,7 +261,7 @@ describe('AuthSession', () => {
 
     const session = new AuthSession({
       authUrl: 'https://auth.example.com',
-      signer: createLocalSigner(PRIVATE_KEY),
+      signer: privateKeyToAccount(PRIVATE_KEY as Hex),
       fetchFn: fetchMock,
     });
 
@@ -271,20 +272,12 @@ describe('AuthSession', () => {
     expect(calls.verify).toBe(1);
   });
 
-  it('rejects invalid private keys and negative refresh margins', () => {
+  it('rejects negative refresh margins', () => {
     expect(
       () =>
         new AuthSession({
           authUrl: 'https://auth.example.com',
-          signer: createLocalSigner('0x1234'),
-        })
-    ).toThrow(ValidationError);
-
-    expect(
-      () =>
-        new AuthSession({
-          authUrl: 'https://auth.example.com',
-          signer: createLocalSigner(PRIVATE_KEY),
+          signer: privateKeyToAccount(PRIVATE_KEY as Hex),
           refreshMarginSecs: -1,
         })
     ).toThrow(AuthConfigError);

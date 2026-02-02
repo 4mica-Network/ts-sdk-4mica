@@ -1,139 +1,171 @@
 import {
-  Contract,
-  InterfaceAbi,
-  JsonRpcProvider,
-  Wallet,
-  getBytes,
-  hexlify,
-  toBeHex,
-} from 'ethers';
-import core4micaAbi from './abi/core4mica.json';
-import erc20Abi from './abi/erc20.json';
-import { ContractError } from './errors';
-import { parseU256 } from './utils';
+  createPublicClient,
+  createWalletClient,
+  http,
+  type Hex,
+  type Chain,
+  getContract,
+  erc20Abi,
+  Account,
+  GetContractReturnType,
+  HttpTransport,
+} from 'viem';
+import { mainnet, sepolia, base, baseSepolia, polygon, polygonAmoy } from 'viem/chains';
+import { core4micaAbi } from './abi/core4mica';
+import { parseU256, hexFromBytes } from './utils';
 
-type ContractFactory = (address: string, abi: unknown, signer: Wallet) => Contract;
+type TPublicClient = ReturnType<typeof createPublicClient>;
+type TWalletClient = ReturnType<typeof createWalletClient<HttpTransport, Chain, Account>>;
+
+type CoreContract = GetContractReturnType<
+  typeof core4micaAbi,
+  {
+    public: ReturnType<typeof createPublicClient>;
+    wallet: TWalletClient;
+  }
+>;
+
+type Erc20Contract = GetContractReturnType<
+  typeof erc20Abi,
+  {
+    public: ReturnType<typeof createPublicClient>;
+    wallet: TWalletClient;
+  }
+>;
+
+const CHAINS: Record<number, Chain> = {
+  1: mainnet,
+  11155111: sepolia,
+  8453: base,
+  84532: baseSepolia,
+  137: polygon,
+  80002: polygonAmoy,
+};
+
+function getChain(chainId: number, rpcUrl: string): Chain {
+  const chain = CHAINS[chainId];
+  if (chain) return chain;
+
+  return {
+    id: chainId,
+    name: `local-${chainId}`,
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrls: {
+      default: { http: [rpcUrl] },
+      public: { http: [rpcUrl] },
+    },
+  };
+}
 
 export class ContractGateway {
-  readonly provider: JsonRpcProvider;
-  readonly wallet: Wallet;
-  readonly contract: Contract;
-  private erc20Cache: Map<string, Contract> = new Map();
+  readonly publicClient: TPublicClient;
+  readonly walletClient: TWalletClient;
+  readonly contract: CoreContract;
+  private erc20Cache = new Map<string, Erc20Contract>();
 
-  constructor(
-    ethRpcUrl: string,
-    privateKey: string,
-    contractAddress: string,
-    chainId: number | bigint,
-    provider?: JsonRpcProvider,
-    contractFactory?: ContractFactory
+  private constructor(
+    publicClient: TPublicClient,
+    walletClient: TWalletClient,
+    contract: CoreContract
   ) {
-    const parsedChainId = Number(chainId);
-    if (!Number.isFinite(parsedChainId)) {
-      throw new ContractError(`invalid chain id: ${chainId}`);
-    }
-    const networkish = { chainId: parsedChainId, name: `chain-${parsedChainId}` };
-    this.provider = provider ?? new JsonRpcProvider(ethRpcUrl, networkish);
-    this.wallet = new Wallet(privateKey, this.provider);
-    const factory: ContractFactory =
-      contractFactory ??
-      ((addr, abi, signer) => {
-        const resolvedAbi = (abi as { abi?: InterfaceAbi }).abi ?? (abi as InterfaceAbi);
-        return new Contract(addr, resolvedAbi as InterfaceAbi, signer);
-      });
-    this.contract = factory(contractAddress, core4micaAbi, this.wallet);
+    this.publicClient = publicClient;
+    this.walletClient = walletClient;
+    this.contract = contract;
   }
 
-  async getChainId(): Promise<number> {
-    const network = await this.provider.getNetwork();
-    return Number(network.chainId);
+  static async create(rpcUrl: string, signer: Account, contractAddress: Hex, chainId: number) {
+    const chain = getChain(chainId, rpcUrl);
+
+    const publicClient = createPublicClient({
+      transport: http(rpcUrl),
+    });
+
+    const rpcChainId = await publicClient.getChainId();
+    if (rpcChainId !== Number(chainId)) {
+      throw new Error(`Connected to chain ${rpcChainId}, expected ${chainId}`);
+    }
+
+    const walletClient = createWalletClient({
+      transport: http(rpcUrl),
+      account: signer,
+      chain,
+    });
+
+    const contract = getContract({
+      address: contractAddress,
+      abi: core4micaAbi,
+      client: {
+        public: publicClient,
+        wallet: walletClient,
+      },
+    });
+
+    return new ContractGateway(publicClient, walletClient, contract);
   }
 
-  private erc20(address: string): Contract {
-    const checksum = address;
-    if (!this.erc20Cache.has(checksum)) {
-      this.erc20Cache.set(checksum, new Contract(checksum, erc20Abi.abi ?? erc20Abi, this.wallet));
+  private erc20(token: string): Erc20Contract {
+    if (!this.erc20Cache.has(token)) {
+      this.erc20Cache.set(
+        token,
+        getContract({
+          address: token as Hex,
+          abi: erc20Abi,
+          client: { public: this.publicClient, wallet: this.walletClient },
+        })
+      );
     }
-    return this.erc20Cache.get(checksum)!;
-  }
-
-  private async send<T>(promise: Promise<unknown>): Promise<T> {
-    try {
-      const tx = await promise;
-      if (typeof (tx as { wait?: unknown }).wait === 'function') {
-        return await (tx as { wait: () => Promise<T> }).wait();
-      }
-      return tx as T;
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new ContractError(message);
-    }
+    return this.erc20Cache.get(token)!;
   }
 
   async getGuaranteeDomain(): Promise<string> {
-    return this.send<string>(this.contract.guaranteeDomainSeparator());
+    return this.contract.read.guaranteeDomainSeparator();
   }
 
-  async approveErc20(token: string, amount: number | bigint | string): Promise<unknown> {
+  async approveErc20(token: string, amount: number | bigint | string) {
     const erc20 = this.erc20(token);
-    const { target, address } = this.contract as { target?: string; address?: string };
-    const spender = target ?? address ?? token;
-    return this.send(erc20.approve(spender, parseU256(amount)));
+    // spender address logic
+    const spender = this.contract.address;
+    const hash = await erc20.write.approve([spender, parseU256(amount)]);
+    return this.publicClient.waitForTransactionReceipt({ hash });
   }
 
-  async deposit(amount: number | bigint | string, erc20Token?: string): Promise<unknown> {
+  async deposit(amount: number | bigint | string, erc20Token?: string) {
+    let hash: Hex;
+
     if (erc20Token) {
-      return this.send(this.contract.depositStablecoin(erc20Token, parseU256(amount)));
+      hash = await this.contract.write.depositStablecoin([erc20Token as Hex, parseU256(amount)]);
+    } else {
+      hash = await this.contract.write.deposit({ value: parseU256(amount) });
     }
-    return this.send(
-      this.contract.deposit({
-        value: parseU256(amount),
-      })
-    );
+
+    return this.publicClient.waitForTransactionReceipt({ hash });
   }
 
-  async getUserAssets(): Promise<
-    {
-      asset: string;
-      collateral: bigint;
-      withdrawal_request_timestamp: bigint;
-      withdrawal_request_amount: bigint;
-    }[]
-  > {
-    try {
-      const result = await this.contract.getUserAllAssets(this.wallet.address);
-      return (
-        result as Array<
-          [string, number | bigint | string, number | bigint | string, number | bigint | string]
-        >
-      ).map((asset) => ({
-        asset: asset[0],
-        collateral: parseU256(asset[1]),
-        withdrawal_request_timestamp: parseU256(asset[2]),
-        withdrawal_request_amount: parseU256(asset[3]),
-      }));
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new ContractError(message);
-    }
+  async getUserAssets() {
+    const addr = this.walletClient.account!.address;
+    const result = await this.contract.read.getUserAllAssets([addr]);
+    return result.map((a) => ({
+      asset: a.asset,
+      collateral: a.collateral,
+      withdrawalRequestTimestamp: a.withdrawalRequestTimestamp,
+      withdrawalRequestAmount: a.withdrawalRequestAmount,
+    }));
   }
 
   async getPaymentStatus(tabId: number | bigint): Promise<{
     paid: bigint;
     remunerated: boolean;
-    asset: string;
+    asset: Hex;
   }> {
-    try {
-      const [paid, remunerated, asset] = await this.contract.getPaymentStatus(parseU256(tabId));
-      return {
-        paid: parseU256(paid),
-        remunerated: Boolean(remunerated),
-        asset,
-      };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new ContractError(message);
-    }
+    const [paid, remunerated, asset] = await this.contract.read.getPaymentStatus([
+      parseU256(tabId),
+    ]);
+
+    return {
+      paid,
+      remunerated,
+      asset,
+    };
   }
 
   async payTabEth(
@@ -141,16 +173,16 @@ export class ContractGateway {
     reqId: number | bigint,
     amount: number | bigint | string,
     recipient: string
-  ): Promise<unknown> {
-    const data = Buffer.from(
-      `tab_id:${toBeHex(parseU256(tabId))};req_id:${toBeHex(parseU256(reqId))}`
+  ) {
+    const data = new TextEncoder().encode(
+      `tab_id:${tabId.toString(16)};req_id:${reqId.toString(16)}`
     );
-    const tx = {
-      to: recipient,
+    const hash = await this.walletClient.sendTransaction({
+      to: recipient as Hex,
       value: parseU256(amount),
-      data: hexlify(data),
-    };
-    return this.send(this.wallet.sendTransaction(tx));
+      data: hexFromBytes(data),
+    });
+    return this.publicClient.waitForTransactionReceipt({ hash });
   }
 
   async payTabErc20(
@@ -158,37 +190,64 @@ export class ContractGateway {
     amount: number | bigint | string,
     erc20Token: string,
     recipient: string
-  ): Promise<unknown> {
-    return this.send(
-      this.contract.payTabInERC20Token(parseU256(tabId), erc20Token, parseU256(amount), recipient)
-    );
+  ) {
+    const hash = await this.contract.write.payTabInERC20Token([
+      parseU256(tabId),
+      erc20Token as Hex,
+      parseU256(amount),
+      recipient as Hex,
+    ]);
+
+    return this.publicClient.waitForTransactionReceipt({ hash });
   }
 
-  async requestWithdrawal(amount: number | bigint | string, erc20Token?: string): Promise<unknown> {
+  async requestWithdrawal(amount: number | bigint | string, erc20Token?: string) {
+    const value = parseU256(amount);
+
+    let hash: Hex;
     if (erc20Token) {
-      return this.send(
-        this.contract['requestWithdrawal(address,uint256)'](erc20Token, parseU256(amount))
-      );
+      hash = await this.contract.write.requestWithdrawal([erc20Token as Hex, value]);
+    } else {
+      hash = await this.contract.write.requestWithdrawal([value]);
     }
-    return this.send(this.contract['requestWithdrawal(uint256)'](parseU256(amount)));
+
+    return this.publicClient.waitForTransactionReceipt({ hash });
   }
 
-  async cancelWithdrawal(erc20Token?: string): Promise<unknown> {
+  async cancelWithdrawal(erc20Token?: string) {
+    let hash: Hex;
     if (erc20Token) {
-      return this.send(this.contract['cancelWithdrawal(address)'](erc20Token));
+      hash = await this.contract.write.cancelWithdrawal([erc20Token as Hex]);
+    } else {
+      hash = await this.contract.write.cancelWithdrawal();
     }
-    return this.send(this.contract['cancelWithdrawal()']());
+
+    return this.publicClient.waitForTransactionReceipt({ hash });
   }
 
-  async finalizeWithdrawal(erc20Token?: string): Promise<unknown> {
+  async finalizeWithdrawal(erc20Token?: string) {
+    let hash: Hex;
     if (erc20Token) {
-      return this.send(this.contract['finalizeWithdrawal(address)'](erc20Token));
+      hash = await this.contract.write.finalizeWithdrawal([erc20Token as Hex]);
+    } else {
+      hash = await this.contract.write.finalizeWithdrawal();
     }
-    return this.send(this.contract['finalizeWithdrawal()']());
+
+    return this.publicClient.waitForTransactionReceipt({ hash });
   }
 
-  async remunerate(claimsBlob: Uint8Array, signatureWords: Uint8Array[]): Promise<unknown> {
-    const sigStruct = signatureWords.map((word) => hexlify(getBytes(word)));
-    return this.send(this.contract.remunerate(hexlify(claimsBlob), sigStruct));
+  async remunerate(claimsBlob: Uint8Array, signatureWords: Uint8Array[]) {
+    const sigStruct = {
+      x_c0_a: hexFromBytes(signatureWords[0]),
+      x_c0_b: hexFromBytes(signatureWords[1]),
+      x_c1_a: hexFromBytes(signatureWords[2]),
+      x_c1_b: hexFromBytes(signatureWords[3]),
+      y_c0_a: hexFromBytes(signatureWords[4]),
+      y_c0_b: hexFromBytes(signatureWords[5]),
+      y_c1_a: hexFromBytes(signatureWords[6]),
+      y_c1_b: hexFromBytes(signatureWords[7]),
+    };
+    const hash = await this.contract.write.remunerate([hexFromBytes(claimsBlob), sigStruct]);
+    return this.publicClient.waitForTransactionReceipt({ hash });
   }
 }

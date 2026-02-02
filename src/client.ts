@@ -3,7 +3,7 @@ import { AuthSession } from './auth';
 import type { AuthTokens } from './auth';
 import { Config } from './config';
 import { ContractGateway } from './contract';
-import { AuthMissingConfigError, ClientInitializationError, VerificationError } from './errors';
+import { AuthMissingConfigError, VerificationError } from './errors';
 import { decodeGuaranteeClaims } from './guarantee';
 import {
   AssetBalanceInfo,
@@ -78,10 +78,11 @@ export class Client {
   static async new(cfg: Config): Promise<Client> {
     const rpc = new RpcProxy(cfg.rpcUrl, cfg.adminApiKey);
     const params = await rpc.getPublicParams();
-    const gateway = Client.buildGateway(cfg, params);
-    await Client.validateChainId(gateway, params.chainId);
+    const gateway = await Client.buildGateway(cfg, params);
+
     const guaranteeDomain = await gateway.getGuaranteeDomain();
     const signer = new PaymentSigner(cfg.signer);
+
     const authEnabled = cfg.authUrl !== undefined || cfg.authRefreshMarginSecs !== undefined;
     const authSession =
       cfg.bearerToken || !authEnabled
@@ -100,27 +101,18 @@ export class Client {
     return new Client(rpc, params, gateway, guaranteeDomain, signer, authSession);
   }
 
-  private static buildGateway(cfg: Config, params: CorePublicParameters): ContractGateway {
+  private static async buildGateway(
+    cfg: Config,
+    params: CorePublicParameters
+  ): Promise<ContractGateway> {
     const ethRpcUrl = cfg.ethereumHttpRpcUrl ?? params.ethereumHttpRpcUrl;
     const contractAddress = cfg.contractAddress ?? params.contractAddress;
-    return new ContractGateway(ethRpcUrl, cfg.walletPrivateKey, contractAddress, params.chainId);
-  }
-
-  private static async validateChainId(
-    gateway: ContractGateway,
-    expectedChainId: number
-  ): Promise<void> {
-    try {
-      const chainId = await gateway.getChainId();
-      if (Number(chainId) !== Number(expectedChainId)) {
-        throw new ClientInitializationError(
-          `chain id mismatch between core (${expectedChainId}) and provider (${chainId})`
-        );
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new ClientInitializationError(message);
-    }
+    return ContractGateway.create(
+      ethRpcUrl,
+      cfg.signer,
+      contractAddress as `0x${string}`,
+      params.chainId
+    );
   }
 
   async aclose(): Promise<void> {
@@ -157,8 +149,8 @@ export class UserClient {
         ({
           asset: a.asset,
           collateral: parseU256(a.collateral),
-          withdrawalRequestAmount: parseU256(a.withdrawal_request_amount),
-          withdrawalRequestTimestamp: Number(a.withdrawal_request_timestamp),
+          withdrawalRequestAmount: parseU256(a.withdrawalRequestAmount),
+          withdrawalRequestTimestamp: Number(a.withdrawalRequestTimestamp),
         }) satisfies UserInfo
     );
   }
@@ -205,17 +197,11 @@ export class RecipientClient {
   constructor(private client: Client) {}
 
   private get recipientAddress(): string {
-    return normalizeAddress(this.client.gateway.wallet.address);
+    return normalizeAddress(this.client.signer.signer.address);
   }
 
   get guaranteeDomain(): string {
     return this.client.guaranteeDomain;
-  }
-
-  private checkSigner(expected: string): void {
-    if (normalizeAddress(expected) !== this.recipientAddress) {
-      throw new VerificationError('signer address does not match recipient address');
-    }
   }
 
   async createTab(
@@ -224,7 +210,6 @@ export class RecipientClient {
     erc20Token: string | undefined | null,
     ttl?: number | null
   ): Promise<bigint> {
-    this.checkSigner(recipientAddress);
     const body = {
       user_address: normalizeAddress(userAddress),
       recipient_address: normalizeAddress(recipientAddress),
@@ -248,7 +233,6 @@ export class RecipientClient {
     signature: string,
     scheme: SigningScheme
   ): Promise<BLSCert> {
-    this.checkSigner(claims.recipientAddress);
     const payload = {
       claims: {
         version: 'v1',

@@ -1,11 +1,10 @@
+import { Account, privateKeyToAccount } from 'viem/accounts';
 import { ConfigError } from './errors';
-import { createLocalSigner, EvmSigner } from './signing';
 import { ValidationError, normalizeAddress, normalizePrivateKey, validateUrl } from './utils';
 
 export interface Config {
   rpcUrl: string;
-  walletPrivateKey: string;
-  signer: EvmSigner;
+  signer: Account;
   ethereumHttpRpcUrl?: string;
   contractAddress?: string;
   adminApiKey?: string;
@@ -15,9 +14,9 @@ export interface Config {
 }
 
 export class ConfigBuilder {
-  private _rpcUrl: string | undefined = 'http://127.0.0.1:3000';
+  private _rpcUrl: string | undefined = 'https://api.4mica.xyz/';
   private _walletPrivateKey: string | undefined;
-  private _signer: EvmSigner | undefined;
+  private _signer: Account | undefined;
   private _ethereumHttpRpcUrl?: string;
   private _contractAddress?: string;
   private _adminApiKey?: string;
@@ -36,7 +35,7 @@ export class ConfigBuilder {
     return this;
   }
 
-  signer(value: EvmSigner): ConfigBuilder {
+  signer(value: Account): ConfigBuilder {
     this._signer = value;
     return this;
   }
@@ -112,7 +111,8 @@ export class ConfigBuilder {
         ? normalizePrivateKey(this._walletPrivateKey)
         : undefined;
 
-      const signer: EvmSigner = this._signer ?? createLocalSigner(walletPrivateKey!);
+      const signer: Account =
+        this._signer ?? privateKeyToAccount(walletPrivateKey! as `0x${string}`);
 
       const ethereumHttpRpcUrl = this._ethereumHttpRpcUrl
         ? validateUrl(this._ethereumHttpRpcUrl)
@@ -130,7 +130,6 @@ export class ConfigBuilder {
 
       return {
         rpcUrl,
-        walletPrivateKey: walletPrivateKey ?? signer.address,
         signer,
         ethereumHttpRpcUrl,
         contractAddress,
