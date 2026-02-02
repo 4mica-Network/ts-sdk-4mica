@@ -1,18 +1,52 @@
 {
   "name": "@4mica/sdk",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "TypeScript SDK for interacting with the 4Mica payment network",
+  "license": "MIT",
+
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/4mica-Network/ts-sdk-4mica.git"
+  },
+  "homepage": "https://github.com/4mica-Network/ts-sdk-4mica#readme",
+  "bugs": {
+    "url": "https://github.com/4mica-Network/ts-sdk-4mica/issues"
+  },
+
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+
+  "files": ["dist"],
+  "sideEffects": false,
+
+  "engines": {
+    "node": ">=18"
+  },
+
+  "publishConfig": {
+    "access": "public"
+  },
+
+  "keywords": ["4mica", "payments", "payment-network", "blockchain", "sdk", "typescript", "ethers"],
+
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "lint": "eslint . --ext .ts",
     "fmt": "prettier --check \"{src,tests}/**/*.{ts,js,json}\""
   },
+
   "dependencies": {
     "ethers": "^6.16.0"
   },
+
   "devDependencies": {
     "@eslint/js": "^9.39.2",
     "@types/node": "^25.2.0",
@@ -26,6 +60,5 @@
     "typescript": "^5.3.3",
     "typescript-eslint": "^8.54.0",
     "vitest": "^4.0.17"
-  },
-  "license": "MIT"
+  }
 }
