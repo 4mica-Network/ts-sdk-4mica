@@ -30,12 +30,13 @@ Node.js 18+ is required.
 The SDK requires a signing key and can use sensible defaults for the rest:
 
 - `walletPrivateKey` (**required** unless `signer` is provided): private key used for signing
-- `rpcUrl` (optional): URL of the 4Mica core RPC server. Defaults to `http://127.0.0.1:3000`.
+- `rpcUrl` (optional): URL of the 4Mica core RPC server. Defaults to `https://api.4mica.xyz/`.
 - `ethereumHttpRpcUrl` (optional): Ethereum JSON-RPC endpoint; fetched from core if omitted
 - `contractAddress` (optional): Core4Mica contract address; fetched from core if omitted
 - `adminApiKey` (optional): API key for admin RPCs
 - `bearerToken` (optional): static bearer token for auth
-- `authUrl` and `authRefreshMarginSecs` (optional): SIWE auth config
+- `authUrl` and `authRefreshMarginSecs` (optional): SIWE auth config. Only used when auth is
+  enabled via `enableAuth()` or by setting either value (defaults to `rpcUrl` and 60 seconds).
 
 > Note: `ethereumHttpRpcUrl` and `contractAddress` are fetched from the core service and validated
 > against the connected Ethereum provider automatically. Only override these if you need to use
@@ -63,17 +64,24 @@ async function main() {
 
 ### 2) Using Environment Variables
 
-Set environment variables:
+Set environment variables (example `.env`):
 
 ```bash
-export 4MICA_WALLET_PRIVATE_KEY="0x..."
-export 4MICA_RPC_URL="https://api.4mica.xyz/"
-export 4MICA_ETHEREUM_HTTP_RPC_URL="http://localhost:8545"
-export 4MICA_CONTRACT_ADDRESS="0x..."
-export 4MICA_ADMIN_API_KEY="ak_..."
-export 4MICA_BEARER_TOKEN="Bearer <access_token>"
-export 4MICA_AUTH_URL="https://api.4mica.xyz/"
-export 4MICA_AUTH_REFRESH_MARGIN_SECS="60"
+4MICA_WALLET_PRIVATE_KEY="0x..."
+4MICA_RPC_URL="https://api.4mica.xyz/"
+4MICA_ETHEREUM_HTTP_RPC_URL="http://localhost:8545"
+4MICA_CONTRACT_ADDRESS="0x..."
+4MICA_ADMIN_API_KEY="ak_..."
+4MICA_BEARER_TOKEN="Bearer <access_token>"
+4MICA_AUTH_URL="https://api.4mica.xyz/"
+4MICA_AUTH_REFRESH_MARGIN_SECS="60"
+```
+
+If you want to set them inline for a single command, use `env` since most shells do not allow
+variable names that start with a digit:
+
+```bash
+env 4MICA_WALLET_PRIVATE_KEY="0x..." 4MICA_RPC_URL="https://api.4mica.xyz/" node app.js
 ```
 
 Then in code:
@@ -87,13 +95,15 @@ const client = await Client.new(cfg);
 
 ### 3) Using a Custom Signer
 
-If you want to integrate with a custom signer (hardware wallet, remote signer, etc.), provide an
-`EvmSigner` implementation. It must expose `address`, `signTypedData`, and `signMessage`.
+If you want to integrate with a custom signer (hardware wallet, remote signer, etc.), provide a
+`viem` `Account` implementation. It must expose `address`, `signTypedData`, and `signMessage` for
+SIWE auth.
 
 ```ts
-import { Client, ConfigBuilder, createLocalSigner } from "@4mica/sdk";
+import { Client, ConfigBuilder } from "@4mica/sdk";
+import { privateKeyToAccount } from "viem/accounts";
 
-const signer = createLocalSigner(process.env.PAYER_KEY!);
+const signer = privateKeyToAccount(process.env.PAYER_KEY as `0x${string}`);
 const cfg = new ConfigBuilder().signer(signer).build();
 const client = await Client.new(cfg);
 ```
@@ -246,6 +256,7 @@ async function settle(
 
 Notes:
 - `signPayment` and `signPaymentV2` always use EIP-712 signing and will error if the scheme is not 4mica.
+- `UserClient.signPayment` supports `SigningScheme.EIP712` (default) and `SigningScheme.EIP191`.
 - `settlePayment` only hits `/settle`; resource servers should still call `/verify` first when enforcing access.
 
 ### API Methods Summary
