@@ -1,48 +1,7 @@
-import { AbiCoder, Wallet, getBytes } from 'ethers';
+import { Account, toBytes, encodeAbiParameters, type Hex } from 'viem';
 import { SigningError } from './errors';
 import { PaymentGuaranteeRequestClaims, PaymentSignature, SigningScheme } from './models';
-import { ValidationError, normalizeAddress, normalizePrivateKey } from './utils';
-
-/**
- * ClientEvmSigner - Used by x402 clients to sign payment authorizations
- * This is typically a LocalAccount or wallet that holds private keys
- * and can sign EIP-712 typed data for payment authorizations
- */
-export type EvmSigner = {
-  readonly address: `0x${string}`;
-
-  signTypedData(message: {
-    domain: Record<string, unknown>;
-    types: Record<string, unknown>;
-    primaryType: string;
-    message: Record<string, unknown>;
-  }): Promise<`0x${string}`>;
-
-  signMessage(message: { message: string }): Promise<`0x${string}`>;
-};
-
-export function createLocalSigner(privateKey: string): EvmSigner {
-  privateKey = normalizePrivateKey(privateKey);
-  const wallet = new Wallet(privateKey);
-  return {
-    address: wallet.address as `0x${string}`,
-    signTypedData: async (message) => {
-      const signature = await wallet.signTypedData(
-        message.domain,
-        { [message.primaryType]: message.types[message.primaryType] } as Record<
-          string,
-          Array<{ name: string; type: string }>
-        >,
-        message.message
-      );
-      return signature as `0x${string}`;
-    },
-    signMessage: async ({ message }) => {
-      const signature = await wallet.signMessage(message);
-      return signature as `0x${string}`;
-    },
-  };
-}
+import { ValidationError, normalizeAddress } from './utils';
 
 export class CorePublicParameters {
   constructor(
@@ -58,7 +17,7 @@ export class CorePublicParameters {
     const pkRaw = payload.public_key ?? payload.publicKey;
     const pk =
       typeof pkRaw === 'string'
-        ? getBytes(pkRaw)
+        ? toBytes(pkRaw)
         : pkRaw instanceof Uint8Array
           ? pkRaw
           : Array.isArray(pkRaw)
@@ -101,12 +60,12 @@ export type GuaranteeTypedData = {
     chainId: number;
   };
   message: {
-    user: string;
-    recipient: string;
+    user: Hex;
+    recipient: Hex;
     tabId: bigint;
     reqId: bigint;
     amount: bigint;
-    asset: string;
+    asset: Hex;
     timestamp: bigint;
   };
 };
@@ -262,37 +221,45 @@ export function buildGuaranteeTypedData(
       chainId: params.chainId,
     },
     message: {
-      user: claims.userAddress,
-      recipient: claims.recipientAddress,
+      user: claims.userAddress as Hex,
+      recipient: claims.recipientAddress as Hex,
       tabId: claims.tabId,
       reqId: claims.reqId,
       amount: claims.amount,
-      asset: claims.assetAddress,
+      asset: claims.assetAddress as Hex,
       timestamp: BigInt(claims.timestamp),
     },
   } as const;
 }
 
 export function encodeGuaranteeEip191(claims: PaymentGuaranteeRequestClaims): string {
-  const payload = AbiCoder.defaultAbiCoder().encode(
-    ['address', 'address', 'uint256', 'uint256', 'uint256', 'address', 'uint64'],
+  const payload = encodeAbiParameters(
     [
-      claims.userAddress,
-      claims.recipientAddress,
+      { type: 'address' },
+      { type: 'address' },
+      { type: 'uint256' },
+      { type: 'uint256' },
+      { type: 'uint256' },
+      { type: 'address' },
+      { type: 'uint64' },
+    ],
+    [
+      claims.userAddress as Hex,
+      claims.recipientAddress as Hex,
       claims.tabId,
       claims.reqId,
       claims.amount,
-      claims.assetAddress,
-      claims.timestamp,
+      claims.assetAddress as Hex,
+      BigInt(claims.timestamp),
     ]
   );
   return payload;
 }
 
 export class PaymentSigner {
-  private signer: EvmSigner;
+  readonly signer: Account;
 
-  constructor(signer: EvmSigner) {
+  constructor(signer: Account) {
     this.signer = signer;
   }
 
@@ -304,6 +271,10 @@ export class PaymentSigner {
     try {
       validateGuaranteeSigningContext(params, claims, { signerAddress: this.signer.address });
       if (scheme === SigningScheme.EIP712) {
+        if (!this.signer.signTypedData) {
+          throw new SigningError('signTypedData is not supported for this account');
+        }
+
         const typed = buildGuaranteeTypedData(params, claims);
         const signature = await this.signer.signTypedData({
           domain: typed.domain,
@@ -314,6 +285,10 @@ export class PaymentSigner {
         return { signature, scheme };
       }
       if (scheme === SigningScheme.EIP191) {
+        if (!this.signer.signMessage) {
+          throw new SigningError('signMessage is not supported for this account');
+        }
+
         const message = encodeGuaranteeEip191(claims);
         const signature = await this.signer.signMessage({ message });
         return { signature, scheme };

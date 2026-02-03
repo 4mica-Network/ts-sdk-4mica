@@ -1,3 +1,5 @@
+import { Hex } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { ConfigBuilder } from '../src/config';
 import { ConfigError } from '../src/errors';
@@ -21,9 +23,11 @@ describe('ConfigBuilder', () => {
   it('reads from env', () => {
     process.env['4MICA_RPC_URL'] = 'https://example.com';
     process.env['4MICA_WALLET_PRIVATE_KEY'] = '11'.repeat(32);
+    const address = privateKeyToAccount(('0x' + '11'.repeat(32)) as Hex).address;
+
     const cfg = new ConfigBuilder().fromEnv().build();
     expect(cfg.rpcUrl).toBe('https://example.com');
-    expect(cfg.walletPrivateKey.startsWith('0x11')).toBe(true);
+    expect(cfg.signer.address).toBe(address);
   });
 
   it('requires private key', () => {

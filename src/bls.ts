@@ -1,4 +1,4 @@
-import { getBytes } from 'ethers';
+import { toBytes } from 'viem';
 import { VerificationError } from './errors';
 
 type BlsField = { value?: string | number | bigint } | string | number | bigint;
@@ -20,7 +20,7 @@ type BlsModule = {
 
 function splitFp(value: bigint): [Uint8Array, Uint8Array] {
   const be48 = value.toString(16).padStart(96, '0');
-  const bytes = getBytes(`0x${be48}`);
+  const bytes = toBytes(`0x${be48}`);
   const hi = new Uint8Array(32);
   hi.set(bytes.slice(0, 16), 16);
   const lo = bytes.slice(16);
@@ -57,7 +57,7 @@ export function signatureToWords(signatureHex: string): Uint8Array[] {
   };
 
   try {
-    const sigBytes = getBytes(signatureHex);
+    const sigBytes = toBytes(signatureHex);
     const point = curves.bls12_381.G2.ProjectivePoint.fromHex(sigBytes);
     const affine = point.toAffine();
     const [x0, x1] = affine.x.c;

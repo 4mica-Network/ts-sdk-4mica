@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Wallet } from 'ethers';
+import { Hex } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import { AuthSession } from '../src/auth';
 import { Client } from '../src/client';
 import { ConfigBuilder } from '../src/config';
@@ -25,7 +26,7 @@ const resolveBearerToken = async (authUrl: string, privateKey: string): Promise<
   if (token) {
     return token;
   }
-  const session = new AuthSession({ authUrl, privateKey });
+  const session = new AuthSession({ authUrl, signer: privateKeyToAccount(privateKey as Hex) });
   try {
     const tokens = await session.login();
     return tokens.accessToken;
@@ -53,7 +54,7 @@ describeIntegration('Auth integration', () => {
       expect(tokens.accessToken).toBeTruthy();
       expect(tokens.refreshToken).toBeTruthy();
 
-      const userAddress = new Wallet(privateKey).address;
+      const userAddress = privateKeyToAccount(privateKey as Hex).address;
       const asset = process.env['ASSET_ADDRESS'] ?? '0x0000000000000000000000000000000000000000';
       try {
         await client.rpc.getUserAssetBalance(userAddress, asset);
@@ -81,7 +82,7 @@ describeIntegration('Auth integration', () => {
 
     const client = await Client.new(cfg);
     try {
-      const userAddress = new Wallet(privateKey).address;
+      const userAddress = privateKeyToAccount(privateKey as Hex).address;
       const asset = process.env['ASSET_ADDRESS'] ?? '0x0000000000000000000000000000000000000000';
       try {
         await client.rpc.getUserAssetBalance(userAddress, asset);

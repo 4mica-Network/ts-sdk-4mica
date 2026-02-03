@@ -1,4 +1,4 @@
-import { getAddress, isAddress } from 'ethers';
+import { Hex, getAddress, isAddress } from 'viem';
 
 export class ValidationError extends Error {
   constructor(message: string) {
@@ -72,4 +72,8 @@ export function parseU256(value: number | bigint | string): bigint {
 
 export function serializeU256(value: number | bigint | string): string {
   return `0x${parseU256(value).toString(16)}`;
+}
+
+export function hexFromBytes(bytes: Uint8Array): Hex {
+  return `0x${Buffer.from(bytes).toString('hex')}`;
 }
