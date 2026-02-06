@@ -38,9 +38,9 @@ The SDK requires a signing key and can use sensible defaults for the rest:
 - `authUrl` and `authRefreshMarginSecs` (optional): SIWE auth config. Only used when auth is
   enabled via `enableAuth()` or by setting either value (defaults to `rpcUrl` and 60 seconds).
 
-> Note: `ethereumHttpRpcUrl` and `contractAddress` are fetched from the core service and validated
-> against the connected Ethereum provider automatically. Only override these if you need to use
-> different values than the server defaults.
+> Note: `ethereumHttpRpcUrl` and `contractAddress` are fetched from the core service by default.
+> The SDK validates the connected chain ID but does not verify the contract address or code. Only
+> override these if you need to use different values than the server defaults.
 
 ### 1) Using ConfigBuilder
 
@@ -153,6 +153,7 @@ X-PAYMENT header (and optional `/settle` call) that the facilitator will accept.
 
 At minimum you need:
 - `scheme` and `network` (scheme must include `4mica`, e.g. `4mica-credit`)
+- `payTo` (recipient address), `asset`, and `maxAmountRequired` (v1) or `amount` (v2)
 - `extra.tabEndpoint` for tab resolution
 
 `X402Flow` will refresh the tab by calling `extra.tabEndpoint` before signing.
@@ -258,6 +259,7 @@ Notes:
 - `signPayment` and `signPaymentV2` always use EIP-712 signing and will error if the scheme is not 4mica.
 - `UserClient.signPayment` supports `SigningScheme.EIP712` (default) and `SigningScheme.EIP191`.
 - `settlePayment` only hits `/settle`; resource servers should still call `/verify` first when enforcing access.
+- `RecipientClient.remunerate` requires the optional `@noble/curves` dependency for BLS decoding.
 
 ### API Methods Summary
 
@@ -303,8 +305,7 @@ Available under `client.rpc` (requires an admin API key):
 ## Error Handling
 
 All SDK errors extend `FourMicaError`. Common error types include `ConfigError`, `RpcError`,
-`ClientInitializationError`, `ContractError`, `SigningError`, `VerificationError`, `X402Error`, and
-`AuthError`.
+`SigningError`, `VerificationError`, `X402Error`, and `AuthError`.
 
 ## License
 
