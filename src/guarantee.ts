@@ -68,10 +68,7 @@ export function decodeGuaranteeClaims(data: string | Uint8Array): PaymentGuarant
     if (byteLen !== WRAPPED_CLAIMS_BYTES) {
       throw new VerificationError(`unexpected guarantee claims length: ${byteLen} bytes`);
     }
-    const [version, wrapped] = decodeAbiParameters(
-      [{ type: 'uint64' }, { type: 'bytes' }],
-      hex
-    );
+    const [version, wrapped] = decodeAbiParameters([{ type: 'uint64' }, { type: 'bytes' }], hex);
     if (version !== 1n) {
       throw new VerificationError(`unsupported guarantee claims version: ${version}`);
     }

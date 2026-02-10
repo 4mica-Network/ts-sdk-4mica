@@ -108,7 +108,9 @@ const normalizeSignature = (input: unknown): { hex: string; bytes: Uint8Array } 
   if (DEBUG_BLS) {
     const type =
       input && typeof input === 'object'
-        ? `object(keys=${Object.keys(input as Record<string, unknown>).slice(0, 6).join(',')})`
+        ? `object(keys=${Object.keys(input as Record<string, unknown>)
+            .slice(0, 6)
+            .join(',')})`
         : typeof input;
     // eslint-disable-next-line no-console
     console.log(`  debug bls: normalizeSignature input=${type}`);
@@ -157,15 +159,14 @@ const normalizeSignature = (input: unknown): { hex: string; bytes: Uint8Array } 
   }
   const label =
     input && typeof input === 'object'
-      ? `object(keys=${Object.keys(input as Record<string, unknown>).slice(0, 6).join(',')})`
+      ? `object(keys=${Object.keys(input as Record<string, unknown>)
+          .slice(0, 6)
+          .join(',')})`
       : typeof input;
   throw new VerificationError(`expected signature hex string or bytes, got ${label}`);
 };
 
-const signatureToWordsWith = (
-  curves: BlsModule,
-  signatureHex: BlsSignatureInput
-): Uint8Array[] => {
+const signatureToWordsWith = (curves: BlsModule, signatureHex: BlsSignatureInput): Uint8Array[] => {
   const toBigint = (field: BlsField): bigint => {
     if (typeof field === 'bigint' || typeof field === 'number' || typeof field === 'string') {
       return BigInt(field);
