@@ -71,7 +71,7 @@ const loadCurvesSync = (): BlsModule => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     curvesCache = require('@noble/curves/bls12-381') as BlsModule;
     return curvesCache;
-  } catch (err) {
+  } catch {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       curvesCache = require('@noble/curves/bls12-381.js') as BlsModule;
@@ -90,7 +90,7 @@ const loadCurvesAsync = async (): Promise<BlsModule> => {
       // Try CJS first.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       return require('@noble/curves/bls12-381') as BlsModule;
-    } catch (_err) {
+    } catch {
       try {
         const mod = (await import('@noble/curves/bls12-381.js')) as BlsModule;
         return mod;
@@ -112,7 +112,6 @@ const normalizeSignature = (input: unknown): { hex: string; bytes: Uint8Array } 
             .slice(0, 6)
             .join(',')})`
         : typeof input;
-    // eslint-disable-next-line no-console
     console.log(`  debug bls: normalizeSignature input=${type}`);
   }
   if (typeof input === 'string') {

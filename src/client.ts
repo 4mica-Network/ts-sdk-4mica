@@ -280,7 +280,6 @@ export class RecipientClient {
     };
     if (process.env.DEBUG_CERTS === '1') {
       const preview = typeof cert.signature === 'string' ? cert.signature.slice(0, 12) : '';
-      // eslint-disable-next-line no-console
       console.log(`  debug remunerate: signature=${describeValue(cert.signature)} ${preview}`);
     }
     if (typeof cert.claims !== 'string') {

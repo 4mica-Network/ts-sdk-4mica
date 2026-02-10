@@ -24,6 +24,18 @@ type TabResponse = {
   nextReqId?: string;
 };
 
+type TabResponseWire = TabResponse & {
+  tab_id?: string;
+  user_address?: string;
+  recipient_address?: string;
+  asset_address?: string;
+  start_timestamp?: number;
+  ttl_seconds?: number;
+  next_req_id?: string;
+  reqId?: string;
+  req_id?: string;
+};
+
 type GuaranteeResult = {
   reqId: bigint;
   amount: bigint;
@@ -228,19 +240,16 @@ async function createTabViaFacilitator(input: {
   if (!response.ok) {
     throw new Error(`facilitator /tabs failed (${response.status}): ${text}`);
   }
-  const body = text ? (JSON.parse(text) as TabResponse) : ({} as TabResponse);
+  const body = text ? (JSON.parse(text) as TabResponseWire) : ({} as TabResponseWire);
   return {
-    tabId: body.tabId ?? (body as any).tab_id,
-    userAddress: body.userAddress ?? (body as any).user_address,
-    recipientAddress: body.recipientAddress ?? (body as any).recipient_address,
-    assetAddress: body.assetAddress ?? (body as any).asset_address,
-    startTimestamp: body.startTimestamp ?? (body as any).start_timestamp,
-    ttlSeconds: body.ttlSeconds ?? (body as any).ttl_seconds,
+    tabId: body.tabId ?? body.tab_id,
+    userAddress: body.userAddress ?? body.user_address,
+    recipientAddress: body.recipientAddress ?? body.recipient_address,
+    assetAddress: body.assetAddress ?? body.asset_address,
+    startTimestamp: body.startTimestamp ?? body.start_timestamp,
+    ttlSeconds: body.ttlSeconds ?? body.ttl_seconds,
     nextReqId:
-      body.nextReqId ??
-      (body as any).next_req_id ??
-      (body as any).reqId ??
-      (body as any).req_id,
+      body.nextReqId ?? body.next_req_id ?? body.reqId ?? body.req_id,
   };
 }
 
@@ -255,9 +264,7 @@ async function main() {
   const ttlSeconds = Number(process.env.TAB_TTL_SECONDS ?? "60");
   const depositUsdc = process.env.DEPOSIT_USDC ?? "1";
   const guaranteeAmountsRaw = process.env.GUARANTEE_AMOUNTS_USDC ?? "0.0001,0.0001,0.0001";
-  const payAmountUsdc = process.env.PAY_AMOUNT_USDC ?? "0.0001";
-  const maxRemunerationWaitSecs = Number(process.env.MAX_REMUNERATION_WAIT_SECS ?? "120");
-  const forceRemunerationWait = process.env.FORCE_REMUNERATION_WAIT === "1";
+  const payAmountUsdc = process.env.PAY_AMOUNT_USDC;
   const disableAuth = process.env.DISABLE_AUTH === "1";
   const bearerToken = process.env["4MICA_BEARER_TOKEN"];
   const remunerationOnly = process.env.REMUNERATION_ONLY === "1";
@@ -516,14 +523,23 @@ async function main() {
 
     step(6, "Settle/pay the tab");
     const totalGuaranteed = guarantees[guarantees.length - 1]?.totalAmount ?? 0n;
-    const payAmount = payAmountUsdc
-      ? parseUnits(payAmountUsdc, usdcDecimals)
-      : totalGuaranteed;
-    info(
-      `pay amount: ${formatAmount(payAmount, usdcDecimals)}${
-        payAmountUsdc ? " (from PAY_AMOUNT_USDC)" : " (total guaranteed)"
-      }`
-    );
+    let payAmount = totalGuaranteed;
+    let payAmountNote = " (total guaranteed from last guarantee)";
+    if (payAmountUsdc) {
+      const requestedPayAmount = parseUnits(payAmountUsdc, usdcDecimals);
+      if (requestedPayAmount !== totalGuaranteed) {
+        warn(
+          `PAY_AMOUNT_USDC (${payAmountUsdc}) does not match total guaranteed (${formatAmount(
+            totalGuaranteed,
+            usdcDecimals
+          )}); using the total for remuneration`
+        );
+      } else {
+        payAmountNote = " (PAY_AMOUNT_USDC matches total)";
+      }
+      payAmount = totalGuaranteed;
+    }
+    info(`pay amount: ${formatAmount(payAmount, usdcDecimals)}${payAmountNote}`);
 
     const payApproval = await payerClient.user.approveErc20(usdcAddress, payAmount);
     ok(`approve for pay tx: ${payApproval.transactionHash}`);
