@@ -1,4 +1,5 @@
-import { PaymentSignature, SigningScheme } from '../models';
+import { PaymentSignature } from '../models';
+import type { PaymentPayload, PaymentPayloadClaims } from '../payment';
 
 export interface PaymentRequirementsV1 {
   scheme: string;
@@ -36,23 +37,9 @@ export interface TabResponse {
   nextReqId?: string;
 }
 
-export interface X402PaymentPayloadClaims {
-  version: string;
-  user_address: string;
-  recipient_address: string;
-  tab_id: string;
-  req_id: string;
-  amount: string;
-  timestamp: number;
-  asset_address: string;
-}
+export type X402PaymentPayloadClaims = PaymentPayloadClaims;
 
-export interface X402PaymentPayload {
-  claims: X402PaymentPayloadClaims;
-  /// 65-byte signature as 0x-prefixed hex
-  signature: string;
-  scheme: SigningScheme;
-}
+export type X402PaymentPayload = PaymentPayload;
 
 export interface X402PaymentEnvelopeV1 {
   x402Version: number;

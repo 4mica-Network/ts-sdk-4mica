@@ -1,4 +1,5 @@
 import { toBytes } from 'viem';
+import { DEBUG_BLS } from './debug';
 import { VerificationError } from './errors';
 
 type BlsField = { value?: string | number | bigint } | string | number | bigint;
@@ -15,7 +16,7 @@ type BlsModule = {
   bls12_381: {
     G2: {
       ProjectivePoint?: {
-        fromHex(bytes: Uint8Array): {
+        fromHex(bytes: Uint8Array | string): {
           toAffine(): {
             x: { c?: readonly [BlsField, BlsField]; c0?: BlsField; c1?: BlsField };
             y: { c?: readonly [BlsField, BlsField]; c0?: BlsField; c1?: BlsField };
@@ -23,7 +24,7 @@ type BlsModule = {
         };
       };
       Point?: {
-        fromHex(bytes: Uint8Array): {
+        fromHex(bytes: Uint8Array | string): {
           toAffine(): {
             x: { c?: readonly [BlsField, BlsField]; c0?: BlsField; c1?: BlsField };
             y: { c?: readonly [BlsField, BlsField]; c0?: BlsField; c1?: BlsField };
@@ -36,7 +37,6 @@ type BlsModule = {
 
 let curvesCache: BlsModule | null = null;
 let curvesPromise: Promise<BlsModule> | null = null;
-const DEBUG_BLS = process.env.DEBUG_BLS === '1';
 
 function splitFp(value: bigint): [Uint8Array, Uint8Array] {
   const be48 = value.toString(16).padStart(96, '0');
@@ -91,13 +91,8 @@ const loadCurvesAsync = async (): Promise<BlsModule> => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       return require('@noble/curves/bls12-381') as BlsModule;
     } catch {
-      try {
-        const mod = (await import('@noble/curves/bls12-381.js')) as BlsModule;
-        return mod;
-      } catch {
-        const mod = (await import('@noble/curves/bls12-381')) as BlsModule;
-        return mod;
-      }
+      const mod = (await import('@noble/curves/bls12-381.js')) as unknown as BlsModule;
+      return mod;
     }
   })();
   curvesCache = await curvesPromise;

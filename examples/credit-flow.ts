@@ -4,6 +4,7 @@ import {
   PaymentGuaranteeRequestClaims,
   SigningScheme,
   X402Flow,
+  buildPaymentPayload,
   type PaymentRequirementsV1,
   type X402SignedPayment,
 } from "../src/index";
@@ -85,37 +86,6 @@ const formatAmount = (amount: bigint, decimals: number) =>
 const SCHEME = "4mica-credit";
 const CERT_DIR = join(process.cwd(), "examples", "certs");
 const DEBUG_CERTS = process.env.DEBUG_CERTS !== "0";
-
-const buildSignedPaymentV1 = (
-  requirements: PaymentRequirementsV1,
-  claims: PaymentGuaranteeRequestClaims,
-  signature: { signature: string; scheme: string }
-): X402SignedPayment => {
-  const payload = {
-    claims: {
-      version: "v1",
-      user_address: claims.userAddress,
-      recipient_address: claims.recipientAddress,
-      tab_id: `0x${claims.tabId.toString(16)}`,
-      req_id: `0x${claims.reqId.toString(16)}`,
-      amount: `0x${claims.amount.toString(16)}`,
-      asset_address: claims.assetAddress,
-      timestamp: claims.timestamp,
-    },
-    signature: signature.signature,
-    scheme: signature.scheme,
-  };
-
-  const envelope = {
-    x402Version: 1,
-    scheme: requirements.scheme,
-    network: requirements.network,
-    payload,
-  };
-
-  const header = Buffer.from(JSON.stringify(envelope)).toString("base64");
-  return { header, payload, signature };
-};
 
 const saveCert = async (label: string, payload: Record<string, unknown>) => {
   await mkdir(CERT_DIR, { recursive: true });
@@ -430,7 +400,15 @@ async function main() {
         payTo: recipientAccount.address,
         asset: usdcAddress,
       };
-      const payment = buildSignedPaymentV1(paymentRequirements, claims, signature);
+      const paymentPayload = buildPaymentPayload(claims, signature);
+      const envelope = {
+        x402Version: 1,
+        scheme: paymentRequirements.scheme,
+        network: paymentRequirements.network,
+        payload: paymentPayload,
+      };
+      const header = Buffer.from(JSON.stringify(envelope)).toString("base64");
+      const payment: X402SignedPayment = { header, payload: paymentPayload, signature };
 
       const settled = await flow.settlePayment(payment, paymentRequirements, facilitatorUrl);
       const settlement = settled.settlement as {
@@ -541,26 +519,42 @@ async function main() {
     }
     info(`pay amount: ${formatAmount(payAmount, usdcDecimals)}${payAmountNote}`);
 
-    const payApproval = await payerClient.user.approveErc20(usdcAddress, payAmount);
-    ok(`approve for pay tx: ${payApproval.transactionHash}`);
+    const waitOptions = { timeout: 120_000 };
+    info("waiting up to 120s for transaction receipts");
+    let step6Complete = false;
+    try {
+      const payApproval = await payerClient.user.approveErc20(usdcAddress, payAmount, waitOptions);
+      ok(`approve for pay tx: ${payApproval.transactionHash}`);
 
-    const payReceipt = await payerClient.user.payTab(
-      tabId,
-      0n,
-      payAmount,
-      recipientAccount.address,
-      usdcAddress
-    );
-    ok(`pay tx: ${payReceipt.transactionHash}`);
+      const payReceipt = await payerClient.user.payTab(
+        tabId,
+        0n,
+        payAmount,
+        recipientAccount.address,
+        usdcAddress,
+        waitOptions
+      );
+      ok(`pay tx: ${payReceipt.transactionHash}`);
 
-    const statusAfterPay = await payerClient.user.getTabPaymentStatus(tabId);
-    info(
-      `paid: ${formatAmount(statusAfterPay.paid, usdcDecimals)} remunerated: ${
-        statusAfterPay.remunerated
-      }`
-    );
-    info("note: paid updates after operator records TabPaid on-chain; may show 0 immediately");
-    await pauseIfEnabled("step 6");
+      const statusAfterPay = await payerClient.user.getTabPaymentStatus(tabId);
+      info(
+        `paid: ${formatAmount(statusAfterPay.paid, usdcDecimals)} remunerated: ${
+          statusAfterPay.remunerated
+        }`
+      );
+      info("note: paid updates after operator records TabPaid on-chain; may show 0 immediately");
+      step6Complete = true;
+    } catch (payErr) {
+      warn(
+        `step 6 pay/receipt did not confirm within 120s: ${
+          payErr instanceof Error ? payErr.message : String(payErr)
+        }`
+      );
+      warn("continuing to next step");
+    }
+    if (step6Complete) {
+      await pauseIfEnabled("step 6");
+    }
 
     step(7, "Call for remuneration (uses latest guarantee)");
     const last = guarantees[guarantees.length - 1];

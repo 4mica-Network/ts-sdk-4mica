@@ -4,7 +4,6 @@ import {
   TabResponse,
   X402SignedPayment,
   X402SettledPayment,
-  X402PaymentPayload,
   PaymentRequirementsV2,
   X402PaymentRequired,
   X402PaymentEnvelopeV1,
@@ -14,6 +13,7 @@ import {
 import { normalizeAddress, parseU256 } from '../utils';
 import type { FetchFn } from '../rpc';
 import { X402Error } from '../errors';
+import { buildPaymentPayload } from '../payment';
 
 export * from './models';
 
@@ -47,7 +47,7 @@ export class X402Flow {
 
     const claims = this.buildClaims(paymentRequirements, tab, userAddress);
     const signature = await this.signer.signPayment(claims, SigningScheme.EIP712);
-    const paymentPayload = X402Flow.buildPaymentPayload(claims, signature);
+    const paymentPayload = buildPaymentPayload(claims, signature);
 
     const envelope: X402PaymentEnvelopeV1 = {
       x402Version: 1,
@@ -69,7 +69,7 @@ export class X402Flow {
 
     const claims = this.buildClaims(accepted, tab, userAddress);
     const signature = await this.signer.signPayment(claims, SigningScheme.EIP712);
-    const paymentPayload = X402Flow.buildPaymentPayload(claims, signature);
+    const paymentPayload = buildPaymentPayload(claims, signature);
 
     const envelope: X402PaymentEnvelopeV2 = {
       x402Version: 2,
@@ -190,23 +190,5 @@ export class X402Flow {
     }
   }
 
-  private static buildPaymentPayload(
-    claims: PaymentGuaranteeRequestClaims,
-    signature: PaymentSignature
-  ): X402PaymentPayload {
-    return {
-      claims: {
-        version: 'v1',
-        user_address: claims.userAddress,
-        recipient_address: claims.recipientAddress,
-        tab_id: `0x${claims.tabId.toString(16)}`,
-        req_id: `0x${claims.reqId.toString(16)}`,
-        amount: `0x${claims.amount.toString(16)}`,
-        asset_address: claims.assetAddress,
-        timestamp: claims.timestamp,
-      },
-      signature: signature.signature,
-      scheme: signature.scheme,
-    };
-  }
+  // payment payload construction is centralized in ../payment
 }

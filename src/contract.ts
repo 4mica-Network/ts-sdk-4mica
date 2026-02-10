@@ -10,8 +10,8 @@ import {
   GetContractReturnType,
   HttpTransport,
 } from 'viem';
-import { mainnet, sepolia, base, baseSepolia, polygon, polygonAmoy } from 'viem/chains';
 import { core4micaAbi } from './abi/core4mica';
+import { getChain } from './chain';
 import { parseU256, hexFromBytes } from './utils';
 
 type TPublicClient = ReturnType<typeof createPublicClient>;
@@ -33,29 +33,10 @@ type Erc20Contract = GetContractReturnType<
   }
 >;
 
-const CHAINS: Record<number, Chain> = {
-  1: mainnet,
-  11155111: sepolia,
-  8453: base,
-  84532: baseSepolia,
-  137: polygon,
-  80002: polygonAmoy,
+export type TxReceiptWaitOptions = {
+  timeout?: number;
+  pollingInterval?: number;
 };
-
-function getChain(chainId: number, rpcUrl: string): Chain {
-  const chain = CHAINS[chainId];
-  if (chain) return chain;
-
-  return {
-    id: chainId,
-    name: `local-${chainId}`,
-    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-    rpcUrls: {
-      default: { http: [rpcUrl] },
-      public: { http: [rpcUrl] },
-    },
-  };
-}
 
 export class ContractGateway {
   readonly publicClient: TPublicClient;
@@ -121,15 +102,23 @@ export class ContractGateway {
     return this.contract.read.guaranteeDomainSeparator();
   }
 
-  async approveErc20(token: string, amount: number | bigint | string) {
+  async approveErc20(
+    token: string,
+    amount: number | bigint | string,
+    waitOptions?: TxReceiptWaitOptions
+  ) {
     const erc20 = this.erc20(token);
     // spender address logic
     const spender = this.contract.address;
     const hash = await erc20.write.approve([spender, parseU256(amount)]);
-    return this.publicClient.waitForTransactionReceipt({ hash });
+    return this.publicClient.waitForTransactionReceipt({ hash, ...(waitOptions ?? {}) });
   }
 
-  async deposit(amount: number | bigint | string, erc20Token?: string) {
+  async deposit(
+    amount: number | bigint | string,
+    erc20Token?: string,
+    waitOptions?: TxReceiptWaitOptions
+  ) {
     let hash: Hex;
 
     if (erc20Token) {
@@ -138,7 +127,7 @@ export class ContractGateway {
       hash = await this.contract.write.deposit({ value: parseU256(amount) });
     }
 
-    return this.publicClient.waitForTransactionReceipt({ hash });
+    return this.publicClient.waitForTransactionReceipt({ hash, ...(waitOptions ?? {}) });
   }
 
   async getUserAssets() {
@@ -172,7 +161,8 @@ export class ContractGateway {
     tabId: number | bigint,
     reqId: number | bigint,
     amount: number | bigint | string,
-    recipient: string
+    recipient: string,
+    waitOptions?: TxReceiptWaitOptions
   ) {
     const data = new TextEncoder().encode(
       `tab_id:${tabId.toString(16)};req_id:${reqId.toString(16)}`
@@ -182,14 +172,15 @@ export class ContractGateway {
       value: parseU256(amount),
       data: hexFromBytes(data),
     });
-    return this.publicClient.waitForTransactionReceipt({ hash });
+    return this.publicClient.waitForTransactionReceipt({ hash, ...(waitOptions ?? {}) });
   }
 
   async payTabErc20(
     tabId: number | bigint,
     amount: number | bigint | string,
     erc20Token: string,
-    recipient: string
+    recipient: string,
+    waitOptions?: TxReceiptWaitOptions
   ) {
     const hash = await this.contract.write.payTabInERC20Token([
       parseU256(tabId),
@@ -198,10 +189,14 @@ export class ContractGateway {
       recipient as Hex,
     ]);
 
-    return this.publicClient.waitForTransactionReceipt({ hash });
+    return this.publicClient.waitForTransactionReceipt({ hash, ...(waitOptions ?? {}) });
   }
 
-  async requestWithdrawal(amount: number | bigint | string, erc20Token?: string) {
+  async requestWithdrawal(
+    amount: number | bigint | string,
+    erc20Token?: string,
+    waitOptions?: TxReceiptWaitOptions
+  ) {
     const value = parseU256(amount);
 
     let hash: Hex;
@@ -211,10 +206,10 @@ export class ContractGateway {
       hash = await this.contract.write.requestWithdrawal([value]);
     }
 
-    return this.publicClient.waitForTransactionReceipt({ hash });
+    return this.publicClient.waitForTransactionReceipt({ hash, ...(waitOptions ?? {}) });
   }
 
-  async cancelWithdrawal(erc20Token?: string) {
+  async cancelWithdrawal(erc20Token?: string, waitOptions?: TxReceiptWaitOptions) {
     let hash: Hex;
     if (erc20Token) {
       hash = await this.contract.write.cancelWithdrawal([erc20Token as Hex]);
@@ -222,10 +217,10 @@ export class ContractGateway {
       hash = await this.contract.write.cancelWithdrawal();
     }
 
-    return this.publicClient.waitForTransactionReceipt({ hash });
+    return this.publicClient.waitForTransactionReceipt({ hash, ...(waitOptions ?? {}) });
   }
 
-  async finalizeWithdrawal(erc20Token?: string) {
+  async finalizeWithdrawal(erc20Token?: string, waitOptions?: TxReceiptWaitOptions) {
     let hash: Hex;
     if (erc20Token) {
       hash = await this.contract.write.finalizeWithdrawal([erc20Token as Hex]);
@@ -233,10 +228,14 @@ export class ContractGateway {
       hash = await this.contract.write.finalizeWithdrawal();
     }
 
-    return this.publicClient.waitForTransactionReceipt({ hash });
+    return this.publicClient.waitForTransactionReceipt({ hash, ...(waitOptions ?? {}) });
   }
 
-  async remunerate(claimsBlob: Uint8Array, signatureWords: Uint8Array[]) {
+  async remunerate(
+    claimsBlob: Uint8Array,
+    signatureWords: Uint8Array[],
+    waitOptions?: TxReceiptWaitOptions
+  ) {
     const sigStruct = {
       x_c0_a: hexFromBytes(signatureWords[0]),
       x_c0_b: hexFromBytes(signatureWords[1]),
@@ -248,6 +247,6 @@ export class ContractGateway {
       y_c1_b: hexFromBytes(signatureWords[7]),
     };
     const hash = await this.contract.write.remunerate([hexFromBytes(claimsBlob), sigStruct]);
-    return this.publicClient.waitForTransactionReceipt({ hash });
+    return this.publicClient.waitForTransactionReceipt({ hash, ...(waitOptions ?? {}) });
   }
 }

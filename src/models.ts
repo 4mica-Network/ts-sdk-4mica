@@ -1,14 +1,17 @@
+import { getAny } from './serde';
 import { normalizeAddress, parseU256 } from './utils';
+
+export {
+  ADMIN_API_KEY_HEADER,
+  ADMIN_API_KEY_PREFIX,
+  ADMIN_SCOPE_MANAGE_KEYS,
+  ADMIN_SCOPE_SUSPEND_USERS,
+} from './constants';
 
 export enum SigningScheme {
   EIP712 = 'eip712',
   EIP191 = 'eip191',
 }
-
-export const ADMIN_API_KEY_HEADER = 'x-api-key';
-export const ADMIN_API_KEY_PREFIX = 'ak_';
-export const ADMIN_SCOPE_SUSPEND_USERS = 'user_suspension:write';
-export const ADMIN_SCOPE_MANAGE_KEYS = 'admin_api_keys:manage';
 
 export interface PaymentSignature {
   signature: string;
@@ -150,13 +153,6 @@ export class AdminApiKeySecret {
       (getAny(raw, 'api_key', 'apiKey') ?? '') as string
     );
   }
-}
-
-function getAny<T>(raw: Record<string, unknown>, ...keys: string[]): T | undefined {
-  for (const key of keys) {
-    if (key in raw) return raw[key] as T;
-  }
-  return undefined;
 }
 
 export class TabInfo {

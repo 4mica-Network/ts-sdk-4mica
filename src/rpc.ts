@@ -1,13 +1,10 @@
-import {
-  ADMIN_API_KEY_HEADER,
-  AdminApiKeyInfo,
-  AdminApiKeySecret,
-  UserSuspensionStatus,
-} from './models';
+import { ADMIN_API_KEY_HEADER } from './constants';
+import { AdminApiKeyInfo, AdminApiKeySecret, UserSuspensionStatus } from './models';
 import { CorePublicParameters } from './signing';
 import { RpcError } from './errors';
+import { normalizeBaseUrl, requestJson, type FetchFn as HttpFetchFn } from './http';
 
-export type FetchFn = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+export type FetchFn = HttpFetchFn;
 export type BearerTokenProvider = () => string | Promise<string>;
 
 function serializeTabId(tabId: number | bigint): string {
@@ -22,7 +19,7 @@ export class RpcProxy {
   private fetchFn: FetchFn;
 
   constructor(endpoint: string, adminApiKey?: string, fetchFn: FetchFn = fetch) {
-    this.baseUrl = endpoint.endsWith('/') ? endpoint.slice(0, -1) : endpoint;
+    this.baseUrl = normalizeBaseUrl(endpoint);
     this.adminApiKey = adminApiKey;
     this.fetchFn = fetchFn;
   }
@@ -68,54 +65,43 @@ export class RpcProxy {
     return `Bearer ${trimmed}`;
   }
 
-  private async decode<T>(response: Response): Promise<T> {
-    let payload: unknown;
-    try {
-      payload = await response.json();
-    } catch (err) {
-      if (response.ok) {
-        throw new RpcError(`invalid JSON response from ${response.url}: ${String(err)}`);
-      }
-      payload = await response.text();
-    }
-
-    if (response.ok) {
-      return payload as T;
-    }
-
-    let message = 'unknown error';
-    if (payload && typeof payload === 'object') {
-      const record = payload as Record<string, unknown>;
-      const error = record.error;
-      const msg = record.message;
-      message =
-        (typeof error === 'string' && error) ||
-        (typeof msg === 'string' && msg) ||
-        JSON.stringify(record, (_k, v) => v);
-    } else if (typeof payload === 'string' && payload.trim()) {
-      message = payload.trim();
-    }
-    throw new RpcError(`${response.status}: ${message}`, {
-      status: response.status,
-      body: payload,
-    });
-  }
-
   private async get<T>(path: string): Promise<T> {
-    const resp = await this.fetchFn(`${this.baseUrl}${path}`, {
-      headers: await this.headers(),
-      method: 'GET',
-    });
-    return this.decode<T>(resp);
+    return requestJson<T>(
+      this.fetchFn,
+      `${this.baseUrl}${path}`,
+      {
+        headers: await this.headers(),
+        method: 'GET',
+      },
+      {
+        decodeError: (message) => new RpcError(message),
+        httpError: (message, response, body) =>
+          new RpcError(message, {
+            status: response.status,
+            body,
+          }),
+      }
+    );
   }
 
-  private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
-    const resp = await this.fetchFn(`${this.baseUrl}${path}`, {
-      headers: { 'content-type': 'application/json', ...(await this.headers()) },
-      method: 'POST',
-      body: JSON.stringify(body),
-    });
-    return this.decode<T>(resp);
+  private async post<T>(path: string, body: unknown): Promise<T> {
+    return requestJson<T>(
+      this.fetchFn,
+      `${this.baseUrl}${path}`,
+      {
+        headers: { 'content-type': 'application/json', ...(await this.headers()) },
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+      {
+        decodeError: (message) => new RpcError(message),
+        httpError: (message, response, body) =>
+          new RpcError(message, {
+            status: response.status,
+            body,
+          }),
+      }
+    );
   }
 
   async getPublicParams(): Promise<CorePublicParameters> {
@@ -123,11 +109,11 @@ export class RpcProxy {
     return CorePublicParameters.fromRpc(data);
   }
 
-  async issueGuarantee(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async issueGuarantee(body: unknown): Promise<Record<string, unknown>> {
     return this.post<Record<string, unknown>>('/core/guarantees', body);
   }
 
-  async createPaymentTab(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async createPaymentTab(body: unknown): Promise<Record<string, unknown>> {
     return this.post<Record<string, unknown>>('/core/payment-tabs', body);
   }
 
@@ -205,7 +191,7 @@ export class RpcProxy {
     return UserSuspensionStatus.fromRpc(data);
   }
 
-  async createAdminApiKey(body: Record<string, unknown>): Promise<AdminApiKeySecret> {
+  async createAdminApiKey(body: unknown): Promise<AdminApiKeySecret> {
     const data = await this.post<Record<string, unknown>>('/core/admin/api-keys', body);
     return AdminApiKeySecret.fromRpc(data);
   }

@@ -2,6 +2,7 @@ import { Account, toBytes, encodeAbiParameters, type Hex } from 'viem';
 import { SigningError } from './errors';
 import { PaymentGuaranteeRequestClaims, PaymentSignature, SigningScheme } from './models';
 import { ValidationError, normalizeAddress } from './utils';
+import { isRecord } from './serde';
 
 export class CorePublicParameters {
   constructor(
@@ -80,9 +81,6 @@ export type GuaranteeSigningContextOptions = {
   signerAddress?: string;
   signerChainId?: number;
 };
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 const fieldsMatch = (
   actual: unknown,

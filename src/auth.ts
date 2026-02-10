@@ -1,15 +1,18 @@
 import { Account } from 'viem';
 import type { FetchFn } from './rpc';
+import { normalizeBaseUrl, requestJson } from './http';
 import {
   AuthApiError,
   AuthConfigError,
   AuthDecodeError,
+  AuthError,
   AuthMissingConfigError,
   AuthTransportError,
   AuthUrlError,
   SigningError,
 } from './errors';
 import { ValidationError, validateUrl } from './utils';
+import { isRecord, readNumber, readString, type RecordValue } from './serde';
 
 export type AuthTokens = {
   accessToken: string;
@@ -31,45 +34,35 @@ export type AuthNonceResponse = {
   siwe: SiweTemplate;
 };
 
-type RecordValue = Record<string, unknown>;
-
-const isRecord = (value: unknown): value is RecordValue =>
-  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-
-const readString = (value: unknown, label: string): string => {
-  if (typeof value === 'string' && value.trim()) {
-    return value;
-  }
-  throw new AuthDecodeError(`invalid auth response: missing ${label}`);
-};
-
-const readNumber = (value: unknown, label: string): number => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-  throw new AuthDecodeError(`invalid auth response: missing ${label}`);
-};
+const missingField = (label: string) =>
+  new AuthDecodeError(`invalid auth response: missing ${label}`);
 
 const parseTokens = (payload: RecordValue): AuthTokens => {
-  const accessToken = readString(payload.access_token ?? payload.accessToken, 'access_token');
-  const refreshToken = readString(payload.refresh_token ?? payload.refreshToken, 'refresh_token');
-  const expiresIn = readNumber(payload.expires_in ?? payload.expiresIn, 'expires_in');
+  const accessToken = readString(
+    payload.access_token ?? payload.accessToken,
+    'access_token',
+    missingField
+  );
+  const refreshToken = readString(
+    payload.refresh_token ?? payload.refreshToken,
+    'refresh_token',
+    missingField
+  );
+  const expiresIn = readNumber(payload.expires_in ?? payload.expiresIn, 'expires_in', missingField);
   return { accessToken, refreshToken, expiresIn };
 };
 
 const parseSiweTemplate = (payload: RecordValue): SiweTemplate => {
-  const domain = readString(payload.domain, 'siwe.domain');
-  const uri = readString(payload.uri, 'siwe.uri');
-  const chainId = readNumber(payload.chain_id ?? payload.chainId, 'siwe.chain_id');
-  const statement = readString(payload.statement, 'siwe.statement');
-  const expiration = readString(payload.expiration, 'siwe.expiration');
-  const issuedAt = readString(payload.issued_at ?? payload.issuedAt, 'siwe.issued_at');
+  const domain = readString(payload.domain, 'siwe.domain', missingField);
+  const uri = readString(payload.uri, 'siwe.uri', missingField);
+  const chainId = readNumber(payload.chain_id ?? payload.chainId, 'siwe.chain_id', missingField);
+  const statement = readString(payload.statement, 'siwe.statement', missingField);
+  const expiration = readString(payload.expiration, 'siwe.expiration', missingField);
+  const issuedAt = readString(
+    payload.issued_at ?? payload.issuedAt,
+    'siwe.issued_at',
+    missingField
+  );
   return { domain, uri, chainId, statement, expiration, issuedAt };
 };
 
@@ -77,7 +70,7 @@ const parseNonceResponse = (payload: unknown): AuthNonceResponse => {
   if (!isRecord(payload)) {
     throw new AuthDecodeError('invalid auth response: nonce payload');
   }
-  const nonce = readString(payload.nonce, 'nonce');
+  const nonce = readString(payload.nonce, 'nonce', missingField);
   if (!isRecord(payload.siwe)) {
     throw new AuthDecodeError('invalid auth response: missing siwe template');
   }
@@ -105,7 +98,7 @@ export class AuthClient {
   constructor(endpoint: string, fetchFn: FetchFn = fetch) {
     try {
       const validated = validateUrl(endpoint);
-      this.baseUrl = validated.endsWith('/') ? validated.slice(0, -1) : validated;
+      this.baseUrl = normalizeBaseUrl(validated);
     } catch (err) {
       if (err instanceof ValidationError) {
         throw new AuthUrlError(err.message);
@@ -149,54 +142,22 @@ export class AuthClient {
   }
 
   private async request(path: string, init: RequestInit): Promise<unknown> {
-    let response: Response;
     try {
-      response = await this.fetchFn(`${this.baseUrl}${path}`, init);
+      return await requestJson<unknown>(this.fetchFn, `${this.baseUrl}${path}`, init, {
+        decodeError: (message) => new AuthDecodeError(message),
+        httpError: (message, response, body) =>
+          new AuthApiError(message, {
+            status: response.status,
+            body,
+          }),
+        allowEmptyOk: true,
+      });
     } catch (err) {
+      if (err instanceof AuthError) {
+        throw err;
+      }
       throw new AuthTransportError(`auth request failed: ${String(err)}`);
     }
-
-    let text: string;
-    try {
-      text = await response.text();
-    } catch (err) {
-      throw new AuthDecodeError(`invalid response from ${response.url}: ${String(err)}`);
-    }
-
-    let payload: unknown = text;
-    if (text) {
-      try {
-        payload = JSON.parse(text) as unknown;
-      } catch (err) {
-        if (response.ok) {
-          throw new AuthDecodeError(`invalid JSON response from ${response.url}: ${String(err)}`);
-        }
-      }
-    } else {
-      payload = null;
-    }
-
-    if (response.ok) {
-      return payload;
-    }
-
-    let message = 'unknown error';
-    if (payload && typeof payload === 'object') {
-      const record = payload as RecordValue;
-      const error = record.error;
-      const msg = record.message;
-      message =
-        (typeof error === 'string' && error) ||
-        (typeof msg === 'string' && msg) ||
-        JSON.stringify(record, (_k, v) => v);
-    } else if (typeof payload === 'string' && payload.trim()) {
-      message = payload.trim();
-    }
-
-    throw new AuthApiError(`${response.status}: ${message}`, {
-      status: response.status,
-      body: payload,
-    });
   }
 }
 
