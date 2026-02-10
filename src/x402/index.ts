@@ -87,12 +87,18 @@ export class X402Flow {
     facilitatorUrl: string
   ): Promise<X402SettledPayment> {
     const url = `${facilitatorUrl.replace(/\/$/, '')}/settle`;
+    const paymentPayload = X402Flow.decodePaymentHeader(payment.header);
+    const x402Version =
+      typeof paymentPayload === 'object' && paymentPayload && 'x402Version' in paymentPayload
+        ? (paymentPayload as { x402Version?: number }).x402Version
+        : undefined;
     const response = await this.fetchFn(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        x402Version: 1,
+        ...(x402Version ? { x402Version } : {}),
         paymentHeader: payment.header,
+        paymentPayload,
         paymentRequirements,
       }),
     });
@@ -167,6 +173,20 @@ export class X402Flow {
   private static validateScheme(scheme: string): void {
     if (!scheme.toLowerCase().includes('4mica')) {
       throw new X402Error(`invalid scheme: ${scheme}`);
+    }
+  }
+
+  private static decodePaymentHeader(
+    header: string
+  ): X402PaymentEnvelopeV1 | X402PaymentEnvelopeV2 {
+    if (!header || typeof header !== 'string') {
+      throw new X402Error('missing payment header');
+    }
+    try {
+      const decoded = Buffer.from(header, 'base64').toString('utf8');
+      return JSON.parse(decoded) as X402PaymentEnvelopeV1 | X402PaymentEnvelopeV2;
+    } catch (err) {
+      throw new X402Error(`invalid payment header: ${String(err)}`);
     }
   }
 

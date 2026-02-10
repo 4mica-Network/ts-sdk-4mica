@@ -3,6 +3,8 @@ import { VerificationError } from './errors';
 import { PaymentGuaranteeClaims } from './models';
 import { parseU256, hexFromBytes } from './utils';
 
+const CLAIMS_ENCODED_BYTES = 32 * 10;
+const WRAPPED_CLAIMS_BYTES = 32 * 2 + 32 + CLAIMS_ENCODED_BYTES;
 const CLAIM_TYPES = [
   { type: 'bytes32' },
   { type: 'uint256' },
@@ -22,6 +24,13 @@ function ensureDomainBytes(domain: string | Uint8Array): Uint8Array {
     throw new VerificationError('domain separator must be 32 bytes');
   }
   return bytes;
+}
+
+function normalizeHexBytes(data: string | Uint8Array): Hex {
+  if (typeof data === 'string') {
+    return (data.startsWith('0x') ? data : `0x${data}`) as Hex;
+  }
+  return hexFromBytes(data);
 }
 
 export function encodeGuaranteeClaims(claims: PaymentGuaranteeClaims): string {
@@ -49,10 +58,24 @@ export function encodeGuaranteeClaims(claims: PaymentGuaranteeClaims): string {
 }
 
 export function decodeGuaranteeClaims(data: string | Uint8Array): PaymentGuaranteeClaims {
-  const rawBytes = typeof data === 'string' ? toBytes(data) : data;
-  const [version, encoded] = decodeAbiParameters([{ type: 'uint64' }, { type: 'bytes' }], rawBytes);
-  if (version !== 1n) {
-    throw new VerificationError(`unsupported guarantee claims version: ${version}`);
+  const hex = normalizeHexBytes(data);
+  const byteLen = (hex.length - 2) / 2;
+
+  let encoded: Hex;
+  if (byteLen === CLAIMS_ENCODED_BYTES) {
+    encoded = hex;
+  } else {
+    if (byteLen !== WRAPPED_CLAIMS_BYTES) {
+      throw new VerificationError(`unexpected guarantee claims length: ${byteLen} bytes`);
+    }
+    const [version, wrapped] = decodeAbiParameters(
+      [{ type: 'uint64' }, { type: 'bytes' }],
+      hex
+    );
+    if (version !== 1n) {
+      throw new VerificationError(`unsupported guarantee claims version: ${version}`);
+    }
+    encoded = wrapped as Hex;
   }
 
   const [
@@ -66,7 +89,11 @@ export function decodeGuaranteeClaims(data: string | Uint8Array): PaymentGuarant
     asset,
     timestamp,
     claimsVersion,
-  ] = decodeAbiParameters(CLAIM_TYPES, encoded as Hex);
+  ] = decodeAbiParameters(CLAIM_TYPES, encoded);
+
+  if (claimsVersion !== 1n) {
+    throw new VerificationError(`unsupported guarantee claims version: ${claimsVersion}`);
+  }
 
   return {
     domain: toBytes(domain as Hex),

@@ -1,4 +1,4 @@
-import { signatureToWords } from './bls';
+import { signatureToWordsAsync } from './bls';
 import { AuthSession } from './auth';
 import type { AuthTokens } from './auth';
 import { Config } from './config';
@@ -268,7 +268,34 @@ export class RecipientClient {
 
   async remunerate(cert: BLSCert) {
     this.verifyPaymentGuarantee(cert);
-    const sigWords = signatureToWords(cert.signature);
+    const describeValue = (value: unknown): string => {
+      if (value === null) return 'null';
+      if (value === undefined) return 'undefined';
+      if (Array.isArray(value)) return `array(len=${value.length})`;
+      if (typeof value === 'object') {
+        const keys = Object.keys(value as Record<string, unknown>);
+        return `object(keys=${keys.slice(0, 6).join(',')}${keys.length > 6 ? ',...' : ''})`;
+      }
+      return typeof value;
+    };
+    if (process.env.DEBUG_CERTS === '1') {
+      const preview = typeof cert.signature === 'string' ? cert.signature.slice(0, 12) : '';
+      // eslint-disable-next-line no-console
+      console.log(
+        `  debug remunerate: signature=${describeValue(cert.signature)} ${preview}`
+      );
+    }
+    if (typeof cert.claims !== 'string') {
+      throw new VerificationError(
+        `certificate.claims must be a hex string, got ${describeValue(cert.claims)}`
+      );
+    }
+    if (typeof cert.signature !== 'string') {
+      throw new VerificationError(
+        `certificate.signature must be a hex string, got ${describeValue(cert.signature)}`
+      );
+    }
+    const sigWords = await signatureToWordsAsync(cert.signature);
     const claimsBytes = Buffer.from(cert.claims.replace(/^0x/, ''), 'hex');
     return this.client.gateway.remunerate(claimsBytes, sigWords);
   }
