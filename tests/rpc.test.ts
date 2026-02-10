@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { RpcProxy } from '../src/rpc';
 import type { FetchFn } from '../src/rpc';
 import { RpcError } from '../src/errors';
+import { ADMIN_API_KEY_HEADER } from '../src/constants';
 
 describe('RpcProxy', () => {
   it('round trips public params', async () => {
@@ -72,5 +73,52 @@ describe('RpcProxy', () => {
     await new RpcProxy('http://example.com', undefined, fetchPrefixed)
       .withBearerToken('Bearer token')
       .getPublicParams();
+  });
+
+  it('adds bearer token from provider', async () => {
+    const params = {
+      publicKey: [1, 2, 3],
+      contractAddress: '0x1234567890abcdef1234567890abcdef12345678',
+      ethereumHttpRpcUrl: 'http://localhost:8545',
+      eip712Name: '4mica',
+      eip712Version: '1',
+      chainId: 1337,
+    };
+    const fetchMock = vi.fn<FetchFn>(async (_input, init) => {
+      const headers = init?.headers as Record<string, string>;
+      expect(headers.Authorization).toBe('Bearer token');
+      return new Response(JSON.stringify(params), { status: 200 });
+    });
+    const proxy = new RpcProxy('http://example.com', undefined, fetchMock);
+    proxy.withTokenProvider(async () => 'token');
+    await proxy.getPublicParams();
+  });
+
+  it('adds admin api key header', async () => {
+    const params = {
+      publicKey: [1, 2, 3],
+      contractAddress: '0x1234567890abcdef1234567890abcdef12345678',
+      ethereumHttpRpcUrl: 'http://localhost:8545',
+      eip712Name: '4mica',
+      eip712Version: '1',
+      chainId: 1337,
+    };
+    const fetchMock = vi.fn<FetchFn>(async (_input, init) => {
+      const headers = init?.headers as Record<string, string>;
+      expect(headers[ADMIN_API_KEY_HEADER]).toBe('key');
+      return new Response(JSON.stringify(params), { status: 200 });
+    });
+    await new RpcProxy('http://example.com', 'key', fetchMock).getPublicParams();
+  });
+
+  it('encodes settlement status query params', async () => {
+    const fetchMock = vi.fn<FetchFn>(async (input) => {
+      const url = new URL(input.toString());
+      expect(url.pathname).toContain('/core/recipients/0xdead/tabs');
+      expect(url.searchParams.getAll('settlement_status')).toEqual(['PENDING', 'SETTLED']);
+      return new Response(JSON.stringify([]), { status: 200 });
+    });
+    const proxy = new RpcProxy('http://example.com', undefined, fetchMock);
+    await proxy.listRecipientTabs('0xdead', ['PENDING', 'SETTLED']);
   });
 });

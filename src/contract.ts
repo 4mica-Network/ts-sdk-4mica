@@ -43,6 +43,7 @@ export class ContractGateway {
   readonly walletClient: TWalletClient;
   readonly contract: CoreContract;
   private erc20Cache = new Map<string, Erc20Contract>();
+  private txQueue: Promise<void> = Promise.resolve();
 
   private constructor(
     publicClient: TPublicClient,
@@ -98,6 +99,16 @@ export class ContractGateway {
     return this.erc20Cache.get(token)!;
   }
 
+  private enqueueTx<T>(fn: () => Promise<T>): Promise<T> {
+    // Serialize transaction submissions to avoid nonce collisions.
+    const run = this.txQueue.then(fn, fn);
+    this.txQueue = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
+  }
+
   async getGuaranteeDomain(): Promise<string> {
     return this.contract.read.guaranteeDomainSeparator();
   }
@@ -110,7 +121,7 @@ export class ContractGateway {
     const erc20 = this.erc20(token);
     // spender address logic
     const spender = this.contract.address;
-    const hash = await erc20.write.approve([spender, parseU256(amount)]);
+    const hash = await this.enqueueTx(() => erc20.write.approve([spender, parseU256(amount)]));
     return this.publicClient.waitForTransactionReceipt({ hash, ...(waitOptions ?? {}) });
   }
 
@@ -122,9 +133,11 @@ export class ContractGateway {
     let hash: Hex;
 
     if (erc20Token) {
-      hash = await this.contract.write.depositStablecoin([erc20Token as Hex, parseU256(amount)]);
+      hash = await this.enqueueTx(() =>
+        this.contract.write.depositStablecoin([erc20Token as Hex, parseU256(amount)])
+      );
     } else {
-      hash = await this.contract.write.deposit({ value: parseU256(amount) });
+      hash = await this.enqueueTx(() => this.contract.write.deposit({ value: parseU256(amount) }));
     }
 
     return this.publicClient.waitForTransactionReceipt({ hash, ...(waitOptions ?? {}) });
@@ -167,11 +180,13 @@ export class ContractGateway {
     const data = new TextEncoder().encode(
       `tab_id:${tabId.toString(16)};req_id:${reqId.toString(16)}`
     );
-    const hash = await this.walletClient.sendTransaction({
-      to: recipient as Hex,
-      value: parseU256(amount),
-      data: hexFromBytes(data),
-    });
+    const hash = await this.enqueueTx(() =>
+      this.walletClient.sendTransaction({
+        to: recipient as Hex,
+        value: parseU256(amount),
+        data: hexFromBytes(data),
+      })
+    );
     return this.publicClient.waitForTransactionReceipt({ hash, ...(waitOptions ?? {}) });
   }
 
@@ -182,12 +197,14 @@ export class ContractGateway {
     recipient: string,
     waitOptions?: TxReceiptWaitOptions
   ) {
-    const hash = await this.contract.write.payTabInERC20Token([
-      parseU256(tabId),
-      erc20Token as Hex,
-      parseU256(amount),
-      recipient as Hex,
-    ]);
+    const hash = await this.enqueueTx(() =>
+      this.contract.write.payTabInERC20Token([
+        parseU256(tabId),
+        erc20Token as Hex,
+        parseU256(amount),
+        recipient as Hex,
+      ])
+    );
 
     return this.publicClient.waitForTransactionReceipt({ hash, ...(waitOptions ?? {}) });
   }
@@ -201,9 +218,11 @@ export class ContractGateway {
 
     let hash: Hex;
     if (erc20Token) {
-      hash = await this.contract.write.requestWithdrawal([erc20Token as Hex, value]);
+      hash = await this.enqueueTx(() =>
+        this.contract.write.requestWithdrawal([erc20Token as Hex, value])
+      );
     } else {
-      hash = await this.contract.write.requestWithdrawal([value]);
+      hash = await this.enqueueTx(() => this.contract.write.requestWithdrawal([value]));
     }
 
     return this.publicClient.waitForTransactionReceipt({ hash, ...(waitOptions ?? {}) });
@@ -212,9 +231,9 @@ export class ContractGateway {
   async cancelWithdrawal(erc20Token?: string, waitOptions?: TxReceiptWaitOptions) {
     let hash: Hex;
     if (erc20Token) {
-      hash = await this.contract.write.cancelWithdrawal([erc20Token as Hex]);
+      hash = await this.enqueueTx(() => this.contract.write.cancelWithdrawal([erc20Token as Hex]));
     } else {
-      hash = await this.contract.write.cancelWithdrawal();
+      hash = await this.enqueueTx(() => this.contract.write.cancelWithdrawal());
     }
 
     return this.publicClient.waitForTransactionReceipt({ hash, ...(waitOptions ?? {}) });
@@ -223,9 +242,11 @@ export class ContractGateway {
   async finalizeWithdrawal(erc20Token?: string, waitOptions?: TxReceiptWaitOptions) {
     let hash: Hex;
     if (erc20Token) {
-      hash = await this.contract.write.finalizeWithdrawal([erc20Token as Hex]);
+      hash = await this.enqueueTx(() =>
+        this.contract.write.finalizeWithdrawal([erc20Token as Hex])
+      );
     } else {
-      hash = await this.contract.write.finalizeWithdrawal();
+      hash = await this.enqueueTx(() => this.contract.write.finalizeWithdrawal());
     }
 
     return this.publicClient.waitForTransactionReceipt({ hash, ...(waitOptions ?? {}) });
@@ -246,7 +267,9 @@ export class ContractGateway {
       y_c1_a: hexFromBytes(signatureWords[6]),
       y_c1_b: hexFromBytes(signatureWords[7]),
     };
-    const hash = await this.contract.write.remunerate([hexFromBytes(claimsBlob), sigStruct]);
+    const hash = await this.enqueueTx(() =>
+      this.contract.write.remunerate([hexFromBytes(claimsBlob), sigStruct])
+    );
     return this.publicClient.waitForTransactionReceipt({ hash, ...(waitOptions ?? {}) });
   }
 }
