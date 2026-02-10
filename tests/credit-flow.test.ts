@@ -80,13 +80,13 @@ describe('credit-flow coverage', () => {
 
     expect(issueGuarantee).toHaveBeenCalledTimes(1);
     const payload = issueGuarantee.mock.calls[0]?.[0] as Record<string, unknown>;
-    const claims = payload.claims as Record<string, unknown>;
-    expect(claims.tab_id).toBe('0x10');
-    expect(claims.req_id).toBe('0x30');
-    expect(claims.amount).toBe('0x20');
-    expect(claims.user_address).toBe(USER);
-    expect(claims.recipient_address).toBe(RECIPIENT);
-    expect(claims.asset_address).toBe(ASSET);
+    const payloadClaims = payload.claims as Record<string, unknown>;
+    expect(payloadClaims.tab_id).toBe('0x10');
+    expect(payloadClaims.req_id).toBe('0x30');
+    expect(payloadClaims.amount).toBe('0x20');
+    expect(payloadClaims.user_address).toBe(USER);
+    expect(payloadClaims.recipient_address).toBe(RECIPIENT);
+    expect(payloadClaims.asset_address).toBe(ASSET);
 
     expect(cert.claims).toBe('0xabc');
     expect(cert.signature).toBe('0xdef');
