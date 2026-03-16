@@ -1,4 +1,9 @@
-import { PaymentGuaranteeRequestClaims, PaymentSignature, SigningScheme } from '../models';
+import {
+  PaymentGuaranteeRequestClaims,
+  PaymentGuaranteeRequestClaimsV2,
+  PaymentSignature,
+  SigningScheme,
+} from '../models';
 import {
   PaymentRequirementsV1,
   TabResponse,
@@ -14,12 +19,37 @@ import { normalizeAddress, parseU256 } from '../utils';
 import type { FetchFn } from '../rpc';
 import { X402Error } from '../errors';
 import { buildPaymentPayload } from '../payment';
+import { computeValidationSubjectHash, computeValidationRequestHash } from '../validation';
 
 export * from './models';
 
+type ValidationPolicyExtra = Required<
+  Pick<
+    PaymentRequirementsExtra,
+    | 'validationRegistryAddress'
+    | 'validationChainId'
+    | 'validatorAddress'
+    | 'validatorAgentId'
+    | 'minValidationScore'
+  >
+> &
+  PaymentRequirementsExtra;
+
+function hasValidationPolicy(
+  extra: PaymentRequirementsExtra | undefined
+): extra is ValidationPolicyExtra {
+  return !!(
+    extra?.validationRegistryAddress &&
+    extra?.validatorAddress &&
+    extra?.validatorAgentId !== undefined &&
+    extra?.minValidationScore !== undefined &&
+    extra?.validationChainId !== undefined
+  );
+}
+
 export interface FlowSigner {
   signPayment(
-    claims: PaymentGuaranteeRequestClaims,
+    claims: PaymentGuaranteeRequestClaims | PaymentGuaranteeRequestClaimsV2,
     scheme: SigningScheme
   ): Promise<PaymentSignature>;
 }
@@ -67,7 +97,10 @@ export class X402Flow {
     X402Flow.validateScheme(accepted.scheme);
     const tab = await this.requestTab(2, accepted, userAddress, paymentRequired.resource);
 
-    const claims = this.buildClaims(accepted, tab, userAddress);
+    const claims = hasValidationPolicy(accepted.extra)
+      ? this.buildClaimsV2(accepted, tab, userAddress)
+      : this.buildClaims(accepted, tab, userAddress);
+
     const signature = await this.signer.signPayment(claims, SigningScheme.EIP712);
     const paymentPayload = buildPaymentPayload(claims, signature);
 
@@ -168,6 +201,42 @@ export class X402Flow {
       requirements.asset,
       reqId
     );
+  }
+
+  protected buildClaimsV2(
+    requirements: PaymentRequirementsV2,
+    tab: TabResponse,
+    userAddress: string
+  ): PaymentGuaranteeRequestClaimsV2 {
+    const base = this.buildClaims(requirements, tab, userAddress);
+    const extra = requirements.extra!;
+
+    const validationSubjectHash = computeValidationSubjectHash(base);
+
+    const partialClaims = new PaymentGuaranteeRequestClaimsV2({
+      userAddress: base.userAddress,
+      recipientAddress: base.recipientAddress,
+      tabId: base.tabId,
+      reqId: base.reqId,
+      amount: base.amount,
+      timestamp: base.timestamp,
+      assetAddress: base.assetAddress,
+      validationRegistryAddress: extra.validationRegistryAddress!,
+      validationRequestHash: '0x' + '00'.repeat(32),
+      validationChainId: extra.validationChainId!,
+      validatorAddress: extra.validatorAddress!,
+      validatorAgentId: parseU256(extra.validatorAgentId!),
+      minValidationScore: extra.minValidationScore!,
+      validationSubjectHash,
+      requiredValidationTag: extra.requiredValidationTag ?? '',
+    });
+
+    const validationRequestHash = computeValidationRequestHash(partialClaims);
+
+    return new PaymentGuaranteeRequestClaimsV2({
+      ...partialClaims,
+      validationRequestHash,
+    });
   }
 
   private static validateScheme(scheme: string): void {

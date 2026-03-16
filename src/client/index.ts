@@ -4,7 +4,8 @@ import { Config } from '../config';
 import { ContractGateway } from '../contract';
 import { AuthMissingConfigError } from '../errors';
 import { RpcProxy } from '../rpc';
-import { CorePublicParameters, PaymentSigner } from '../signing';
+import { CorePublicParameters } from '../models';
+import { PaymentSigner } from '../signing';
 import { RecipientClient } from './recipient';
 import { UserClient } from './user';
 

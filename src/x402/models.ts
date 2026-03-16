@@ -29,6 +29,13 @@ export type PaymentRequirements = PaymentRequirementsV2;
 
 export interface PaymentRequirementsExtra {
   tabEndpoint?: string;
+  // V2 validation policy fields (flat, matching Rust SDK extra map)
+  validationRegistryAddress?: string;
+  validationChainId?: number;
+  validatorAddress?: string;
+  validatorAgentId?: string;
+  minValidationScore?: number;
+  requiredValidationTag?: string;
 }
 
 export interface TabResponse {

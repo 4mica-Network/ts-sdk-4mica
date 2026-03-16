@@ -1,5 +1,6 @@
 import {
   PaymentGuaranteeRequestClaims,
+  PaymentGuaranteeRequestClaimsV2,
   PaymentSignature,
   SigningScheme,
   TabPaymentStatus,
@@ -22,10 +23,7 @@ export class UserClient {
     amount: number | bigint | string,
     waitOptions?: TxReceiptWaitOptions
   ) {
-    if (waitOptions) {
-      return this.client.gateway.approveErc20(token, amount, waitOptions);
-    }
-    return this.client.gateway.approveErc20(token, amount);
+    return this.client.gateway.approveErc20(token, amount, waitOptions);
   }
 
   async deposit(
@@ -33,10 +31,7 @@ export class UserClient {
     erc20Token?: string,
     waitOptions?: TxReceiptWaitOptions
   ) {
-    if (waitOptions) {
-      return this.client.gateway.deposit(amount, erc20Token, waitOptions);
-    }
-    return this.client.gateway.deposit(amount, erc20Token);
+    return this.client.gateway.deposit(amount, erc20Token, waitOptions);
   }
 
   async getUser(): Promise<UserInfo[]> {
@@ -58,7 +53,7 @@ export class UserClient {
   }
 
   async signPayment(
-    claims: PaymentGuaranteeRequestClaims,
+    claims: PaymentGuaranteeRequestClaims | PaymentGuaranteeRequestClaimsV2,
     scheme: SigningScheme = SigningScheme.EIP712
   ): Promise<PaymentSignature> {
     return this.client.signer.signRequest(this.client.params, claims, scheme);
@@ -73,21 +68,15 @@ export class UserClient {
     waitOptions?: TxReceiptWaitOptions
   ) {
     if (erc20Token) {
-      if (waitOptions) {
-        return this.client.gateway.payTabErc20(
-          tabId,
-          amount,
-          erc20Token,
-          recipientAddress,
-          waitOptions
-        );
-      }
-      return this.client.gateway.payTabErc20(tabId, amount, erc20Token, recipientAddress);
+      return this.client.gateway.payTabErc20(
+        tabId,
+        amount,
+        erc20Token,
+        recipientAddress,
+        waitOptions
+      );
     }
-    if (waitOptions) {
-      return this.client.gateway.payTabEth(tabId, reqId, amount, recipientAddress, waitOptions);
-    }
-    return this.client.gateway.payTabEth(tabId, reqId, amount, recipientAddress);
+    return this.client.gateway.payTabEth(tabId, reqId, amount, recipientAddress, waitOptions);
   }
 
   async requestWithdrawal(
@@ -95,23 +84,14 @@ export class UserClient {
     erc20Token?: string,
     waitOptions?: TxReceiptWaitOptions
   ) {
-    if (waitOptions) {
-      return this.client.gateway.requestWithdrawal(amount, erc20Token, waitOptions);
-    }
-    return this.client.gateway.requestWithdrawal(amount, erc20Token);
+    return this.client.gateway.requestWithdrawal(amount, erc20Token, waitOptions);
   }
 
   async cancelWithdrawal(erc20Token?: string, waitOptions?: TxReceiptWaitOptions) {
-    if (waitOptions) {
-      return this.client.gateway.cancelWithdrawal(erc20Token, waitOptions);
-    }
-    return this.client.gateway.cancelWithdrawal(erc20Token);
+    return this.client.gateway.cancelWithdrawal(erc20Token, waitOptions);
   }
 
   async finalizeWithdrawal(erc20Token?: string, waitOptions?: TxReceiptWaitOptions) {
-    if (waitOptions) {
-      return this.client.gateway.finalizeWithdrawal(erc20Token, waitOptions);
-    }
-    return this.client.gateway.finalizeWithdrawal(erc20Token);
+    return this.client.gateway.finalizeWithdrawal(erc20Token, waitOptions);
   }
 }

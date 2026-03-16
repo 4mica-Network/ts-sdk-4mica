@@ -1,6 +1,6 @@
 import { ADMIN_API_KEY_HEADER } from './constants';
 import { AdminApiKeyInfo, AdminApiKeySecret, UserSuspensionStatus } from './models';
-import { CorePublicParameters } from './signing';
+import { CorePublicParameters } from './models';
 import { RpcError } from './errors';
 import { normalizeBaseUrl, requestJson, type FetchFn as HttpFetchFn } from './http';
 

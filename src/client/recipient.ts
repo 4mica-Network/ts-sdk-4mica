@@ -69,11 +69,21 @@ export class RecipientClient {
     return { claims: certClaims, signature: signatureOut };
   }
 
-  verifyPaymentGuarantee(cert: BLSCert): PaymentGuaranteeClaims {
+  async verifyPaymentGuarantee(cert: BLSCert): Promise<PaymentGuaranteeClaims> {
     const claims = decodeGuaranteeClaims(cert.claims);
-    const domainHex = this.guaranteeDomain.startsWith('0x')
-      ? this.guaranteeDomain.slice(2)
-      : Buffer.from(this.guaranteeDomain).toString('hex');
+    let expectedDomain: string;
+    if (claims.version === 2) {
+      const { domainSeparator, enabled } = await this.client.gateway.getGuaranteeVersionConfig(2);
+      if (!enabled) {
+        throw new VerificationError('guarantee version 2 is not enabled on-chain');
+      }
+      expectedDomain = domainSeparator;
+    } else {
+      expectedDomain = this.guaranteeDomain;
+    }
+    const domainHex = expectedDomain.startsWith('0x')
+      ? expectedDomain.slice(2)
+      : Buffer.from(expectedDomain).toString('hex');
     const claimsHex = Buffer.from(claims.domain).toString('hex');
     if (claimsHex !== domainHex) {
       throw new VerificationError('guarantee domain mismatch');
@@ -82,7 +92,7 @@ export class RecipientClient {
   }
 
   async remunerate(cert: BLSCert, waitOptions?: TxReceiptWaitOptions) {
-    this.verifyPaymentGuarantee(cert);
+    await this.verifyPaymentGuarantee(cert);
     const describeValue = (value: unknown): string => {
       if (value === null) return 'null';
       if (value === undefined) return 'undefined';

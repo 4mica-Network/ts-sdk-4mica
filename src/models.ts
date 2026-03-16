@@ -1,3 +1,4 @@
+import { toBytes } from 'viem';
 import { getAny } from './serde';
 import { normalizeAddress, parseU256 } from './utils';
 
@@ -67,6 +68,59 @@ export class PaymentGuaranteeRequestClaims {
   }
 }
 
+export interface PaymentGuaranteeValidationPolicyV2 {
+  validationRegistryAddress: string;
+  validationRequestHash: string;
+  validationChainId: number;
+  validatorAddress: string;
+  validatorAgentId: bigint;
+  minValidationScore: number;
+  validationSubjectHash: string;
+  requiredValidationTag: string;
+}
+
+export class PaymentGuaranteeRequestClaimsV2 extends PaymentGuaranteeRequestClaims {
+  validationRegistryAddress: string;
+  validationRequestHash: string;
+  validationChainId: number;
+  validatorAddress: string;
+  validatorAgentId: bigint;
+  minValidationScore: number;
+  validationSubjectHash: string;
+  requiredValidationTag: string;
+
+  constructor(init: {
+    userAddress: string;
+    recipientAddress: string;
+    tabId: bigint;
+    reqId?: bigint;
+    amount: bigint;
+    timestamp: number;
+    assetAddress: string;
+    validationRegistryAddress: string;
+    validationRequestHash: string;
+    validationChainId: number;
+    validatorAddress: string;
+    validatorAgentId: bigint;
+    minValidationScore: number;
+    validationSubjectHash: string;
+    requiredValidationTag: string;
+  }) {
+    super(init);
+    if (init.minValidationScore < 1 || init.minValidationScore > 100) {
+      throw new Error(`minValidationScore must be in [1, 100], got ${init.minValidationScore}`);
+    }
+    this.validationRegistryAddress = init.validationRegistryAddress;
+    this.validationRequestHash = init.validationRequestHash;
+    this.validationChainId = init.validationChainId;
+    this.validatorAddress = init.validatorAddress;
+    this.validatorAgentId = init.validatorAgentId;
+    this.minValidationScore = init.minValidationScore;
+    this.validationSubjectHash = init.validationSubjectHash;
+    this.requiredValidationTag = init.requiredValidationTag;
+  }
+}
+
 export interface PaymentGuaranteeClaims {
   domain: Uint8Array;
   userAddress: string;
@@ -78,6 +132,7 @@ export interface PaymentGuaranteeClaims {
   assetAddress: string;
   timestamp: number;
   version: number;
+  validationPolicy?: PaymentGuaranteeValidationPolicyV2;
 }
 
 export interface BLSCert {
@@ -300,6 +355,37 @@ export class RecipientPaymentInfo {
       Boolean(getAny(raw, 'finalized')),
       Boolean(getAny(raw, 'failed')),
       Number(getAny(raw, 'created_at', 'createdAt') ?? 0)
+    );
+  }
+}
+
+export class CorePublicParameters {
+  constructor(
+    public publicKey: Uint8Array,
+    public contractAddress: string,
+    public ethereumHttpRpcUrl: string,
+    public eip712Name: string,
+    public eip712Version: string,
+    public chainId: number
+  ) {}
+
+  static fromRpc(payload: Record<string, unknown>): CorePublicParameters {
+    const pkRaw = payload.public_key ?? payload.publicKey;
+    const pk =
+      typeof pkRaw === 'string'
+        ? toBytes(pkRaw)
+        : pkRaw instanceof Uint8Array
+          ? pkRaw
+          : Array.isArray(pkRaw)
+            ? Uint8Array.from(pkRaw as ArrayLike<number>)
+            : new Uint8Array();
+    return new CorePublicParameters(
+      pk,
+      String(payload.contract_address ?? payload.contractAddress ?? ''),
+      String(payload.ethereum_http_rpc_url ?? payload.ethereumHttpRpcUrl ?? ''),
+      (payload.eip712_name ?? payload.eip712Name ?? '4Mica') as string,
+      (payload.eip712_version ?? payload.eip712Version ?? '1') as string,
+      Number(payload.chain_id ?? payload.chainId)
     );
   }
 }

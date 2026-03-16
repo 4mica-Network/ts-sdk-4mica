@@ -4,7 +4,9 @@ import {
   AdminApiKeySecret,
   AssetBalanceInfo,
   CollateralEventInfo,
+  CorePublicParameters,
   GuaranteeInfo,
+  PaymentGuaranteeRequestClaimsV2,
   PendingRemunerationInfo,
   RecipientPaymentInfo,
   TabInfo,
@@ -133,6 +135,42 @@ describe('models fromRpc', () => {
     expect(secret.apiKey).toBe('secret');
   });
 
+  it('parses collateral event with tabId and reqId present', () => {
+    const ev = CollateralEventInfo.fromRpc({
+      id: '5',
+      user_address: '0x0000000000000000000000000000000000000001',
+      asset_address: '0x0000000000000000000000000000000000000000',
+      amount: '0x10',
+      event_type: 'WITHDRAWAL',
+      tab_id: '0x3',
+      req_id: '0x7',
+      created_at: 999,
+    });
+    expect(ev.tabId).toBe(3n);
+    expect(ev.reqId).toBe(7n);
+    expect(ev.amount).toBe(16n);
+  });
+
+  it('parses pending remuneration with null latest_guarantee', () => {
+    const pending = PendingRemunerationInfo.fromRpc({
+      tab: {
+        tab_id: '0x2',
+        user_address: '0x0000000000000000000000000000000000000001',
+        recipient_address: '0x0000000000000000000000000000000000000002',
+        asset_address: '0x0000000000000000000000000000000000000000',
+        start_timestamp: 100,
+        ttl_seconds: 60,
+        status: 'OPEN',
+        settlement_status: 'PENDING',
+        created_at: 10,
+        updated_at: 20,
+      },
+      latest_guarantee: null,
+    });
+    expect(pending.tab.tabId).toBe(2n);
+    expect(pending.latestGuarantee).toBeNull();
+  });
+
   it('parses user suspension status', () => {
     const status = UserSuspensionStatus.fromRpc({
       user_address: '0x0000000000000000000000000000000000000001',
@@ -140,5 +178,65 @@ describe('models fromRpc', () => {
       updated_at: 123,
     });
     expect(status.suspended).toBe(true);
+  });
+});
+
+const V2_BASE = {
+  userAddress: '0x0000000000000000000000000000000000000001',
+  recipientAddress: '0x0000000000000000000000000000000000000002',
+  tabId: 1n,
+  reqId: 0n,
+  amount: 1n,
+  timestamp: 1,
+  assetAddress: '0x0000000000000000000000000000000000000000',
+  validationRegistryAddress: '0x0000000000000000000000000000000000000011',
+  validationRequestHash: '0x' + '00'.repeat(32),
+  validationChainId: 1,
+  validatorAddress: '0x0000000000000000000000000000000000000022',
+  validatorAgentId: 1n,
+  validationSubjectHash: '0x' + '00'.repeat(32),
+  requiredValidationTag: '',
+};
+
+describe('PaymentGuaranteeRequestClaimsV2 boundaries', () => {
+  it('accepts minValidationScore=1 (lower boundary)', () => {
+    expect(() => new PaymentGuaranteeRequestClaimsV2({ ...V2_BASE, minValidationScore: 1 })).not.toThrow();
+  });
+
+  it('accepts minValidationScore=100 (upper boundary)', () => {
+    expect(
+      () => new PaymentGuaranteeRequestClaimsV2({ ...V2_BASE, minValidationScore: 100 })
+    ).not.toThrow();
+  });
+});
+
+describe('CorePublicParameters.fromRpc', () => {
+  it('applies defaults for missing eip712Name and eip712Version', () => {
+    const params = CorePublicParameters.fromRpc({
+      contract_address: '0x0000000000000000000000000000000000000000',
+      ethereum_http_rpc_url: 'https://rpc.example.com',
+      chain_id: 1,
+    });
+    expect(params.eip712Name).toBe('4Mica');
+    expect(params.eip712Version).toBe('1');
+  });
+
+  it('handles Array publicKey input', () => {
+    const params = CorePublicParameters.fromRpc({
+      public_key: [1, 2, 3],
+      contract_address: '0x0000000000000000000000000000000000000000',
+      ethereum_http_rpc_url: 'https://rpc.example.com',
+      chain_id: 1,
+    });
+    expect(params.publicKey).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it('falls back to empty Uint8Array for missing publicKey', () => {
+    const params = CorePublicParameters.fromRpc({
+      contract_address: '0x0000000000000000000000000000000000000000',
+      ethereum_http_rpc_url: 'https://rpc.example.com',
+      chain_id: 1,
+    });
+    expect(params.publicKey).toEqual(new Uint8Array());
   });
 });

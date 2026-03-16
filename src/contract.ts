@@ -113,6 +113,14 @@ export class ContractGateway {
     return this.contract.read.guaranteeDomainSeparator();
   }
 
+  async getGuaranteeVersionConfig(
+    version: number
+  ): Promise<{ domainSeparator: string; decoder: string; enabled: boolean }> {
+    const [, domainSeparator, decoder, enabled] =
+      await this.contract.read.getGuaranteeVersionConfig([BigInt(version)]);
+    return { domainSeparator: domainSeparator as string, decoder: decoder as string, enabled };
+  }
+
   async approveErc20(
     token: string,
     amount: number | bigint | string,

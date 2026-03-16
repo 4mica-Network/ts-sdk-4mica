@@ -73,6 +73,35 @@ const pauseIfEnabled = async (label: string) => {
   rl.close();
 };
 
+const askYesNo = async (question: string, defaultYes = true): Promise<boolean> => {
+  if (!input.isTTY) {
+    return defaultYes;
+  }
+  const rl = createInterface({ input, output });
+  const suffix = defaultYes ? "[Y/n]" : "[y/N]";
+  try {
+    while (true) {
+      const answer = (await rl.question(`${COLORS.dim}${question} ${suffix} ${COLORS.reset}`))
+        .trim()
+        .toLowerCase();
+      if (!answer) return defaultYes;
+      if (answer === "y" || answer === "yes") return true;
+      if (answer === "n" || answer === "no") return false;
+      warn("Please answer y or n");
+    }
+  } finally {
+    rl.close();
+  }
+};
+
+const shouldRunStep = async (num: number, title: string): Promise<boolean> => {
+  const run = await askYesNo(`Run Step ${num}: ${title}?`);
+  if (!run) {
+    warn(`skipping step ${num}`);
+  }
+  return run;
+};
+
 const parseBigInt = (value: string | number | bigint | null | undefined): bigint => {
   if (value === null || value === undefined) return 0n;
   if (typeof value === "bigint") return value;
@@ -230,11 +259,12 @@ async function main() {
     throw new Error("Set PAYER_PRIVATE_KEY (or 4MICA_WALLET_PRIVATE_KEY)");
   }
   const recipientKey = process.env.RECIPIENT_PRIVATE_KEY ?? payerKey;
-  const facilitatorUrl = process.env.FACILITATOR_URL ?? "http://localhost:8080";
+  const facilitatorUrl = process.env.FACILITATOR_URL ?? "http://127.0.0.1:8080";
   const ttlSeconds = Number(process.env.TAB_TTL_SECONDS ?? "60");
   const depositUsdc = process.env.DEPOSIT_USDC ?? "1";
   const guaranteeAmountsRaw = process.env.GUARANTEE_AMOUNTS_USDC ?? "0.0001,0.0001,0.0001";
   const payAmountUsdc = process.env.PAY_AMOUNT_USDC;
+  const withdrawalRequestUsdc = process.env.WITHDRAW_REQUEST_USDC ?? "0.0001";
   const disableAuth = process.env.DISABLE_AUTH === "1";
   const bearerToken = process.env["4MICA_BEARER_TOKEN"];
   const remunerationOnly = process.env.REMUNERATION_ONLY === "1";
@@ -244,15 +274,12 @@ async function main() {
   const payerAccount = privateKeyToAccount(payerKey as `0x${string}`);
   const recipientAccount = privateKeyToAccount(recipientKey as `0x${string}`);
 
-  step(1, "Load keys and clients");
-  info(`payer: ${payerAccount.address}`);
-  info(`recipient: ${recipientAccount.address}`);
-  if (payerKey === recipientKey) {
-    warn("PAYER_PRIVATE_KEY == RECIPIENT_PRIVATE_KEY (using same wallet for demo)");
-  }
-
-  const payerCfgBuilder = new ConfigBuilder().fromEnv().walletPrivateKey(payerKey);
-  const recipientCfgBuilder = new ConfigBuilder().fromEnv().walletPrivateKey(recipientKey);
+  const rpcUrl = process.env["4MICA_RPC_URL"] ?? "https://staging.api.4mica.xyz/";
+  const payerCfgBuilder = new ConfigBuilder().fromEnv().rpcUrl(rpcUrl).walletPrivateKey(payerKey);
+  const recipientCfgBuilder = new ConfigBuilder()
+    .fromEnv()
+    .rpcUrl(rpcUrl)
+    .walletPrivateKey(recipientKey);
   if (!disableAuth && !bearerToken) {
     payerCfgBuilder.enableAuth();
     recipientCfgBuilder.enableAuth();
@@ -265,226 +292,109 @@ async function main() {
   const flow = X402Flow.fromClient(payerClient);
 
   try {
-    ok("clients ready");
-    if (!disableAuth && !bearerToken) {
-      info("auth enabled (SIWE login)");
-      try {
-        await payerClient.login();
-        if (payerAccount.address !== recipientAccount.address) {
-          await recipientClient.login();
-        }
-        ok("auth login complete");
-      } catch (loginErr) {
-        warn(
-          `auth login failed: ${loginErr instanceof Error ? loginErr.message : String(loginErr)}`
-        );
-      }
-    }
     const network = process.env.X402_NETWORK ?? `eip155:${payerClient.params.chainId}`;
-    info(`x402 network: ${network}`);
-    await pauseIfEnabled("step 1");
+
+    if (await shouldRunStep(1, "Load keys and clients")) {
+      step(1, "Load keys and clients");
+      info(`payer: ${payerAccount.address}`);
+      info(`recipient: ${recipientAccount.address}`);
+      if (payerKey === recipientKey) {
+        warn("PAYER_PRIVATE_KEY == RECIPIENT_PRIVATE_KEY (using same wallet for demo)");
+      }
+      ok("clients ready");
+      if (!disableAuth && !bearerToken) {
+        info("auth enabled (SIWE login)");
+        try {
+          await payerClient.login();
+          if (payerAccount.address !== recipientAccount.address) {
+            await recipientClient.login();
+          }
+          ok("auth login complete");
+        } catch (loginErr) {
+          warn(
+            `auth login failed: ${loginErr instanceof Error ? loginErr.message : String(loginErr)}`
+          );
+        }
+      }
+      info(`x402 network: ${network}`);
+      await pauseIfEnabled("step 1");
+    }
 
     if (remunerationOnly) {
-      step(7, "Remuneration only");
-      const cert =
-        certClaims && certSignature
-          ? { claims: certClaims, signature: certSignature }
-          : await loadLatestCert();
-      const certSource =
-        certClaims && certSignature
-          ? "env CERT_CLAIMS/CERT_SIGNATURE"
-          : "examples/certs/latest.json";
-      debugCert(`${certSource} (raw)`, cert);
-      const normalized = normalizeCert(cert, certSource);
-      debugCert(`${certSource} (normalized)`, normalized);
-      try {
-        recipientClient.recipient.verifyPaymentGuarantee(normalized);
-      } catch (err) {
-        throw new Error(
-          `certificate verification failed (${certSource}): ${
-            err instanceof Error ? err.message : String(err)
-          }`
-        );
+      if (await shouldRunStep(7, "Remuneration only")) {
+        step(7, "Remuneration only");
+        const cert =
+          certClaims && certSignature
+            ? { claims: certClaims, signature: certSignature }
+            : await loadLatestCert();
+        const certSource =
+          certClaims && certSignature
+            ? "env CERT_CLAIMS/CERT_SIGNATURE"
+            : "examples/certs/latest.json";
+        debugCert(`${certSource} (raw)`, cert);
+        const normalized = normalizeCert(cert, certSource);
+        debugCert(`${certSource} (normalized)`, normalized);
+        try {
+          recipientClient.recipient.verifyPaymentGuarantee(normalized);
+        } catch (err) {
+          throw new Error(
+            `certificate verification failed (${certSource}): ${
+              err instanceof Error ? err.message : String(err)
+            }`
+          );
+        }
+        const grace = await recipientClient.gateway.contract.read.remunerationGracePeriod();
+        info(`remunerationGracePeriod: ${grace.toString()}s`);
+        info("calling remunerate immediately (no checks)");
+        const remunReceipt = await recipientClient.recipient.remunerate(normalized);
+        ok(`remunerate tx: ${remunReceipt.transactionHash}`);
       }
-      const grace = await recipientClient.gateway.contract.read.remunerationGracePeriod();
-      info(`remunerationGracePeriod: ${grace.toString()}s`);
-      info("calling remunerate immediately (no checks)");
-      const remunReceipt = await recipientClient.recipient.remunerate(normalized);
-      ok(`remunerate tx: ${remunReceipt.transactionHash}`);
       return;
     }
 
-    step(2, "Deposit 1 USDC on the core network");
     const chainId = payerClient.params.chainId;
-    info(`core chainId: ${chainId}`);
     const expectedChainId = network.startsWith("eip155:")
       ? Number(network.split(":")[1])
       : Number.NaN;
-    if (Number.isFinite(expectedChainId) && chainId !== expectedChainId) {
-      warn(`network/core mismatch: X402_NETWORK=${network} but core chainId=${chainId}`);
-    }
 
     const usdcAddress = (await payerClient.gateway.contract.read.USDC()) as `0x${string}`;
-    info(`USDC address (from contract): ${usdcAddress}`);
-
     const erc20 = getContract({
       address: usdcAddress,
       abi: erc20Abi,
       client: { public: payerClient.gateway.publicClient, wallet: payerClient.gateway.walletClient },
     });
     const usdcDecimals = Number(await erc20.read.decimals());
-    info(`USDC decimals: ${usdcDecimals}`);
-
     const depositAmount = parseUnits(depositUsdc, usdcDecimals);
-    info(`deposit amount: ${formatAmount(depositAmount, usdcDecimals)}`);
-
-    const approval = await payerClient.user.approveErc20(usdcAddress, depositAmount);
-    ok(`approve tx: ${approval.transactionHash}`);
-
-    const depositReceipt = await payerClient.user.deposit(depositAmount, usdcAddress);
-    ok(`deposit tx: ${depositReceipt.transactionHash}`);
-    await pauseIfEnabled("step 2");
-
-    step(3, "Get a tab via facilitator (TTL 60s)");
-    info(`facilitator: ${facilitatorUrl}`);
-    info(`network: ${network}`);
-
-    const tab = await createTabViaFacilitator({
-      facilitatorUrl,
-      userAddress: payerAccount.address,
-      recipientAddress: recipientAccount.address,
-      erc20Token: usdcAddress,
-      ttlSeconds,
-      network,
-    });
-
-    if (!tab.tabId) throw new Error("facilitator /tabs returned empty tabId");
-    const tabId = parseBigInt(tab.tabId);
-    const nextReqId = parseBigInt(tab.nextReqId);
-    ok(`tabId: ${tab.tabId}`);
-    info(`nextReqId: ${tab.nextReqId ?? "0"}`);
-    if (tab.ttlSeconds !== undefined) info(`ttlSeconds: ${tab.ttlSeconds}`);
-    await pauseIfEnabled("step 3");
-
-    step(4, "Issue 3 guarantees via facilitator (reqId sequential)");
-    const guaranteeAmounts = guaranteeAmountsRaw
-      .split(",")
-      .map((part) => part.trim())
-      .filter(Boolean);
-    if (guaranteeAmounts.length < 3) {
-      warn("GUARANTEE_AMOUNTS_USDC has fewer than 3 values; repeating last value");
-    }
-
     const guarantees: GuaranteeResult[] = [];
-    for (let i = 0; i < 3; i += 1) {
-      const amountStr = guaranteeAmounts[Math.min(i, guaranteeAmounts.length - 1)];
-      const amount = parseUnits(amountStr, usdcDecimals);
-      const reqId = nextReqId + BigInt(i);
-      const timestamp = Math.floor(Date.now() / 1000);
+    let tabId: bigint | undefined;
+    let tabIdRaw: string | undefined;
+    let nextReqId = 0n;
 
-      const claims = PaymentGuaranteeRequestClaims.new(
-        payerAccount.address,
-        recipientAccount.address,
-        tabId,
-        amount,
-        timestamp,
-        usdcAddress,
-        reqId
-      );
-
-      const signature = await payerClient.user.signPayment(claims, SigningScheme.EIP712);
-      const paymentRequirements: PaymentRequirementsV1 = {
-        scheme: SCHEME,
-        network,
-        maxAmountRequired: `0x${amount.toString(16)}`,
-        payTo: recipientAccount.address,
-        asset: usdcAddress,
-      };
-      const paymentPayload = buildPaymentPayload(claims, signature);
-      const envelope = {
-        x402Version: 1,
-        scheme: paymentRequirements.scheme,
-        network: paymentRequirements.network,
-        payload: paymentPayload,
-      };
-      const header = Buffer.from(JSON.stringify(envelope)).toString("base64");
-      const payment: X402SignedPayment = { header, payload: paymentPayload, signature };
-
-      const settled = await flow.settlePayment(payment, paymentRequirements, facilitatorUrl);
-      const settlement = settled.settlement as {
-        success?: boolean;
-        error?: string;
-        certificate?: { claims: string; signature: string };
-      };
-      if (!settlement?.success || !settlement.certificate) {
-        throw new Error(
-          `facilitator /settle failed: ${settlement?.error ?? "missing certificate"}`
-        );
+    if (await shouldRunStep(2, "Deposit 1 USDC on the core network")) {
+      step(2, "Deposit 1 USDC on the core network");
+      info(`core chainId: ${chainId}`);
+      info(`core contract address: ${payerClient.params.contractAddress}`);
+      if (Number.isFinite(expectedChainId) && chainId !== expectedChainId) {
+        warn(`network/core mismatch: X402_NETWORK=${network} but core chainId=${chainId}`);
       }
-      debugCert("facilitator /settle certificate (raw)", settlement.certificate);
-      const cert = normalizeCert(settlement.certificate, "facilitator /settle certificate");
-      debugCert("facilitator /settle certificate (normalized)", cert);
+      info(`USDC address (from contract): ${usdcAddress}`);
+      info(`USDC decimals: ${usdcDecimals}`);
+      info(`deposit amount: ${formatAmount(depositAmount, usdcDecimals)}`);
 
-      const decoded = recipientClient.recipient.verifyPaymentGuarantee(cert);
-      const certPayload = {
-        label: `cert-${i + 1}`,
-        tabId: tab.tabId,
-        reqId: reqId.toString(),
-        amount: amount.toString(),
-        totalAmount: decoded.totalAmount.toString(),
-        timestamp: claims.timestamp,
-        userAddress: claims.userAddress,
-        recipientAddress: claims.recipientAddress,
-        assetAddress: claims.assetAddress,
-        network,
-        scheme: SCHEME,
-        cert,
-      };
-      const certPath = await saveCert(`cert-${i + 1}`, certPayload);
-      await saveCert("latest", certPayload);
-      guarantees.push({
-        reqId,
-        amount,
-        cert,
-        totalAmount: decoded.totalAmount,
-        timestamp: claims.timestamp,
-      });
+      const approval = await payerClient.user.approveErc20(usdcAddress, depositAmount);
+      ok(`approve tx: ${approval.transactionHash}`);
 
-      ok(
-        `guarantee #${i + 1} reqId=${reqId.toString()} amount=${formatAmount(
-          amount,
-          usdcDecimals
-        )} total=${formatAmount(decoded.totalAmount, usdcDecimals)}`
-      );
-      info(`cert saved: ${certPath}`);
+      const depositReceipt = await payerClient.user.deposit(depositAmount, usdcAddress);
+      ok(`deposit tx: ${depositReceipt.transactionHash}`);
+      await pauseIfEnabled("step 2");
     }
 
-    try {
-      const guaranteesList = await recipientClient.recipient.getTabGuarantees(tabId);
-      ok(`core guarantees stored: ${guaranteesList.length}`);
-    } catch (listErr) {
-      warn(
-        `could not list guarantees from core (auth may be required): ${
-          listErr instanceof Error ? listErr.message : String(listErr)
-        }`
-      );
-    }
-    await pauseIfEnabled("step 4");
+    if (await shouldRunStep(3, "Get a tab via facilitator (TTL 60s)")) {
+      step(3, "Get a tab via facilitator (TTL 60s)");
+      info(`facilitator: ${facilitatorUrl}`);
+      info(`network: ${network}`);
 
-    step(5, "Wait for tab TTL to elapse");
-    info(`sleeping ${ttlSeconds + 5}s to pass TTL`);
-    await sleep((ttlSeconds + 5) * 1000);
-
-    const tabInfo = await recipientClient.recipient.getTab(tabId);
-    if (tabInfo) {
-      info(`tab status: ${tabInfo.status} (settlement: ${tabInfo.settlementStatus})`);
-    } else {
-      warn("tab not found in core (it may have been closed or GC'd)");
-    }
-
-    if (!tabInfo || tabInfo.status !== "CLOSED") {
-      warn("tab not marked CLOSED yet; requesting /tabs again to force close if expired");
-      await createTabViaFacilitator({
+      const tab = await createTabViaFacilitator({
         facilitatorUrl,
         userAddress: payerAccount.address,
         recipientAddress: recipientAccount.address,
@@ -492,100 +402,285 @@ async function main() {
         ttlSeconds,
         network,
       });
-      const refreshed = await recipientClient.recipient.getTab(tabId);
-      if (refreshed) {
-        info(`after refresh: tab status ${refreshed.status}`);
-      }
-    }
-    await pauseIfEnabled("step 5");
 
-    step(6, "Settle/pay the tab");
-    const totalGuaranteed = guarantees[guarantees.length - 1]?.totalAmount ?? 0n;
-    let payAmount = totalGuaranteed;
-    let payAmountNote = " (total guaranteed from last guarantee)";
-    if (payAmountUsdc) {
-      const requestedPayAmount = parseUnits(payAmountUsdc, usdcDecimals);
-      if (requestedPayAmount !== totalGuaranteed) {
-        warn(
-          `PAY_AMOUNT_USDC (${payAmountUsdc}) does not match total guaranteed (${formatAmount(
-            totalGuaranteed,
-            usdcDecimals
-          )}); using the total for remuneration`
-        );
+      if (!tab.tabId) throw new Error("facilitator /tabs returned empty tabId");
+      tabId = parseBigInt(tab.tabId);
+      tabIdRaw = tab.tabId;
+      nextReqId = parseBigInt(tab.nextReqId);
+      ok(`tabId: ${tab.tabId}`);
+      info(`nextReqId: ${tab.nextReqId ?? "0"}`);
+      if (tab.ttlSeconds !== undefined) info(`ttlSeconds: ${tab.ttlSeconds}`);
+      await pauseIfEnabled("step 3");
+    }
+
+    if (await shouldRunStep(4, "Issue 3 guarantees via facilitator (reqId sequential)")) {
+      if (tabId === undefined) {
+        warn("step 4 requires step 3 (tab creation); skipping");
       } else {
-        payAmountNote = " (PAY_AMOUNT_USDC matches total)";
+        step(4, "Issue 3 guarantees via facilitator (reqId sequential)");
+        const guaranteeAmounts = guaranteeAmountsRaw
+          .split(",")
+          .map((part) => part.trim())
+          .filter(Boolean);
+        if (guaranteeAmounts.length < 3) {
+          warn("GUARANTEE_AMOUNTS_USDC has fewer than 3 values; repeating last value");
+        }
+
+        for (let i = 0; i < 3; i += 1) {
+          const amountStr = guaranteeAmounts[Math.min(i, guaranteeAmounts.length - 1)];
+          const amount = parseUnits(amountStr, usdcDecimals);
+          const reqId = nextReqId + BigInt(i);
+          const timestamp = Math.floor(Date.now() / 1000);
+
+          const claims = PaymentGuaranteeRequestClaims.new(
+            payerAccount.address,
+            recipientAccount.address,
+            tabId,
+            amount,
+            timestamp,
+            usdcAddress,
+            reqId
+          );
+
+          const signature = await payerClient.user.signPayment(claims, SigningScheme.EIP712);
+          const paymentRequirements: PaymentRequirementsV1 = {
+            scheme: SCHEME,
+            network,
+            maxAmountRequired: `0x${amount.toString(16)}`,
+            payTo: recipientAccount.address,
+            asset: usdcAddress,
+          };
+          const paymentPayload = buildPaymentPayload(claims, signature);
+          const envelope = {
+            x402Version: 1,
+            scheme: paymentRequirements.scheme,
+            network: paymentRequirements.network,
+            payload: paymentPayload,
+          };
+          const header = Buffer.from(JSON.stringify(envelope)).toString("base64");
+          const payment: X402SignedPayment = { header, payload: paymentPayload, signature };
+
+          const settled = await flow.settlePayment(payment, paymentRequirements, facilitatorUrl);
+          const settlement = settled.settlement as {
+            success?: boolean;
+            error?: string;
+            certificate?: { claims: string; signature: string };
+          };
+          if (!settlement?.success || !settlement.certificate) {
+            throw new Error(
+              `facilitator /settle failed: ${settlement?.error ?? "missing certificate"}`
+            );
+          }
+          debugCert("facilitator /settle certificate (raw)", settlement.certificate);
+          const cert = normalizeCert(settlement.certificate, "facilitator /settle certificate");
+          debugCert("facilitator /settle certificate (normalized)", cert);
+
+          const decoded = recipientClient.recipient.verifyPaymentGuarantee(cert);
+          const certPayload = {
+            label: `cert-${i + 1}`,
+            tabId: tabIdRaw ?? tabId.toString(),
+            reqId: reqId.toString(),
+            amount: amount.toString(),
+            totalAmount: decoded.totalAmount.toString(),
+            timestamp: claims.timestamp,
+            userAddress: claims.userAddress,
+            recipientAddress: claims.recipientAddress,
+            assetAddress: claims.assetAddress,
+            network,
+            scheme: SCHEME,
+            cert,
+          };
+          const certPath = await saveCert(`cert-${i + 1}`, certPayload);
+          await saveCert("latest", certPayload);
+          guarantees.push({
+            reqId,
+            amount,
+            cert,
+            totalAmount: decoded.totalAmount,
+            timestamp: claims.timestamp,
+          });
+
+          ok(
+            `guarantee #${i + 1} reqId=${reqId.toString()} amount=${formatAmount(
+              amount,
+              usdcDecimals
+            )} total=${formatAmount(decoded.totalAmount, usdcDecimals)}`
+          );
+          info(`cert saved: ${certPath}`);
+        }
+
+        try {
+          const guaranteesList = await recipientClient.recipient.getTabGuarantees(tabId);
+          ok(`core guarantees stored: ${guaranteesList.length}`);
+        } catch (listErr) {
+          warn(
+            `could not list guarantees from core (auth may be required): ${
+              listErr instanceof Error ? listErr.message : String(listErr)
+            }`
+          );
+        }
+        await pauseIfEnabled("step 4");
       }
-      payAmount = totalGuaranteed;
-    }
-    info(`pay amount: ${formatAmount(payAmount, usdcDecimals)}${payAmountNote}`);
-
-    const waitOptions = { timeout: 120_000 };
-    info("waiting up to 120s for transaction receipts");
-    let step6Complete = false;
-    try {
-      const payApproval = await payerClient.user.approveErc20(usdcAddress, payAmount, waitOptions);
-      ok(`approve for pay tx: ${payApproval.transactionHash}`);
-
-      const payReceipt = await payerClient.user.payTab(
-        tabId,
-        0n,
-        payAmount,
-        recipientAccount.address,
-        usdcAddress,
-        waitOptions
-      );
-      ok(`pay tx: ${payReceipt.transactionHash}`);
-
-      const statusAfterPay = await payerClient.user.getTabPaymentStatus(tabId);
-      info(
-        `paid: ${formatAmount(statusAfterPay.paid, usdcDecimals)} remunerated: ${
-          statusAfterPay.remunerated
-        }`
-      );
-      info("note: paid updates after operator records TabPaid on-chain; may show 0 immediately");
-      step6Complete = true;
-    } catch (payErr) {
-      warn(
-        `step 6 pay/receipt did not confirm within 120s: ${
-          payErr instanceof Error ? payErr.message : String(payErr)
-        }`
-      );
-      warn("continuing to next step");
-    }
-    if (step6Complete) {
-      await pauseIfEnabled("step 6");
     }
 
-    step(7, "Call for remuneration (uses latest guarantee)");
-    const last = guarantees[guarantees.length - 1];
-    const grace = await recipientClient.gateway.contract.read.remunerationGracePeriod();
-    const dueAt = Number(last.timestamp) + Number(grace);
+    if (await shouldRunStep(5, "Wait for tab TTL to elapse")) {
+      if (tabId === undefined) {
+        warn("step 5 requires step 3 (tab creation); skipping");
+      } else {
+        step(5, "Wait for tab TTL to elapse");
+        info(`sleeping ${ttlSeconds + 5}s to pass TTL`);
+        await sleep((ttlSeconds + 5) * 1000);
 
-    info(`remunerationGracePeriod: ${grace.toString()}s`);
-    info(`guarantee timestamp: ${last.timestamp}`);
-    info(`due at: ${new Date(dueAt * 1000).toISOString()}`);
+        const tabInfo = await recipientClient.recipient.getTab(tabId);
+        if (tabInfo) {
+          info(`tab status: ${tabInfo.status} (settlement: ${tabInfo.settlementStatus})`);
+        } else {
+          warn("tab not found in core (it may have been closed or GC'd)");
+        }
 
-    debugCert("latest guarantee (raw)", last.cert);
-    const normalized = normalizeCert(last.cert, "latest guarantee");
-    debugCert("latest guarantee (normalized)", normalized);
-    try {
-      recipientClient.recipient.verifyPaymentGuarantee(normalized);
-    } catch (err) {
-      throw new Error(
-        `certificate verification failed (latest guarantee): ${
-          err instanceof Error ? err.message : String(err)
-        }`
-      );
+        if (!tabInfo || tabInfo.status !== "CLOSED") {
+          warn("tab not marked CLOSED yet; requesting /tabs again to force close if expired");
+          await createTabViaFacilitator({
+            facilitatorUrl,
+            userAddress: payerAccount.address,
+            recipientAddress: recipientAccount.address,
+            erc20Token: usdcAddress,
+            ttlSeconds,
+            network,
+          });
+          const refreshed = await recipientClient.recipient.getTab(tabId);
+          if (refreshed) {
+            info(`after refresh: tab status ${refreshed.status}`);
+          }
+        }
+        await pauseIfEnabled("step 5");
+      }
     }
-    const remunReceipt = await recipientClient.recipient.remunerate(normalized);
-    ok(`remunerate tx: ${remunReceipt.transactionHash}`);
 
-    const statusAfterRemun = await payerClient.user.getTabPaymentStatus(tabId);
-    info(
-      `paid: ${formatAmount(statusAfterRemun.paid, usdcDecimals)} remunerated: ${
-        statusAfterRemun.remunerated
-      }`
-    );
+    if (await shouldRunStep(6, "Settle/pay the tab")) {
+      if (tabId === undefined) {
+        warn("step 6 requires step 3 (tab creation); skipping");
+      } else if (guarantees.length === 0) {
+        warn("step 6 requires step 4 guarantees; skipping");
+      } else {
+        step(6, "Settle/pay the tab");
+        const totalGuaranteed = guarantees[guarantees.length - 1]?.totalAmount ?? 0n;
+        let payAmount = totalGuaranteed;
+        let payAmountNote = " (total guaranteed from last guarantee)";
+        if (payAmountUsdc) {
+          const requestedPayAmount = parseUnits(payAmountUsdc, usdcDecimals);
+          if (requestedPayAmount !== totalGuaranteed) {
+            warn(
+              `PAY_AMOUNT_USDC (${payAmountUsdc}) does not match total guaranteed (${formatAmount(
+                totalGuaranteed,
+                usdcDecimals
+              )}); using the total for remuneration`
+            );
+          } else {
+            payAmountNote = " (PAY_AMOUNT_USDC matches total)";
+          }
+          payAmount = totalGuaranteed;
+        }
+        info(`pay amount: ${formatAmount(payAmount, usdcDecimals)}${payAmountNote}`);
+
+        const waitOptions = { timeout: 120_000 };
+        info("waiting up to 120s for transaction receipts");
+        let step6Complete = false;
+        try {
+          const payApproval = await payerClient.user.approveErc20(usdcAddress, payAmount, waitOptions);
+          ok(`approve for pay tx: ${payApproval.transactionHash}`);
+
+          const payReceipt = await payerClient.user.payTab(
+            tabId,
+            0n,
+            payAmount,
+            recipientAccount.address,
+            usdcAddress,
+            waitOptions
+          );
+          ok(`pay tx: ${payReceipt.transactionHash}`);
+
+          const statusAfterPay = await payerClient.user.getTabPaymentStatus(tabId);
+          info(
+            `paid: ${formatAmount(statusAfterPay.paid, usdcDecimals)} remunerated: ${
+              statusAfterPay.remunerated
+            }`
+          );
+          info("note: paid updates after operator records TabPaid on-chain; may show 0 immediately");
+          step6Complete = true;
+        } catch (payErr) {
+          warn(
+            `step 6 pay/receipt did not confirm within 120s: ${
+              payErr instanceof Error ? payErr.message : String(payErr)
+            }`
+          );
+          warn("continuing to next step");
+        }
+        if (step6Complete) {
+          await pauseIfEnabled("step 6");
+        }
+      }
+    }
+
+    if (await shouldRunStep(7, "Call for remuneration (uses latest guarantee)")) {
+      if (tabId === undefined) {
+        warn("step 7 requires step 3 (tab creation); skipping");
+      } else if (guarantees.length === 0) {
+        warn("step 7 requires step 4 guarantees; skipping");
+      } else {
+        step(7, "Call for remuneration (uses latest guarantee)");
+        const last = guarantees[guarantees.length - 1];
+        const grace = await recipientClient.gateway.contract.read.remunerationGracePeriod();
+        const dueAt = Number(last.timestamp) + Number(grace);
+
+        info(`remunerationGracePeriod: ${grace.toString()}s`);
+        info(`guarantee timestamp: ${last.timestamp}`);
+        info(`due at: ${new Date(dueAt * 1000).toISOString()}`);
+
+        debugCert("latest guarantee (raw)", last.cert);
+        const normalized = normalizeCert(last.cert, "latest guarantee");
+        debugCert("latest guarantee (normalized)", normalized);
+        try {
+          recipientClient.recipient.verifyPaymentGuarantee(normalized);
+        } catch (err) {
+          throw new Error(
+            `certificate verification failed (latest guarantee): ${
+              err instanceof Error ? err.message : String(err)
+            }`
+          );
+        }
+        const remunReceipt = await recipientClient.recipient.remunerate(normalized);
+        ok(`remunerate tx: ${remunReceipt.transactionHash}`);
+
+        const statusAfterRemun = await payerClient.user.getTabPaymentStatus(tabId);
+        info(
+          `paid: ${formatAmount(statusAfterRemun.paid, usdcDecimals)} remunerated: ${
+            statusAfterRemun.remunerated
+          }`
+        );
+      }
+    }
+
+    if (await shouldRunStep(8, "Request withdrawal (0.0001 USDC)")) {
+      step(8, "Request withdrawal (0.0001 USDC)");
+      const withdrawalAmount = parseUnits(withdrawalRequestUsdc, usdcDecimals);
+      info(`withdraw request amount: ${formatAmount(withdrawalAmount, usdcDecimals)}`);
+
+      const withdrawalReceipt = await payerClient.user.requestWithdrawal(withdrawalAmount, usdcAddress);
+      ok(`withdraw request tx: ${withdrawalReceipt.transactionHash}`);
+
+      const assets = await payerClient.user.getUser();
+      const usdcAsset = assets.find((asset) => asset.asset.toLowerCase() === usdcAddress.toLowerCase());
+      if (usdcAsset) {
+        info(
+          `pending withdrawal amount: ${formatAmount(
+            usdcAsset.withdrawalRequestAmount,
+            usdcDecimals
+          )}`
+        );
+      }
+      await pauseIfEnabled("step 8");
+    }
 
     ok("done");
   } catch (e) {

@@ -4,6 +4,7 @@ export * from './config';
 export * from './utils';
 export * from './models';
 export * from './payment';
+export * from './validation';
 export * from './signing';
 export * from './rpc';
 export * from './auth';
