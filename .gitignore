@@ -23,6 +23,7 @@ pnpm-debug.log*
 .vscode/
 .idea/
 .fleet/
+.claude/
 
 # Tooling caches
 .eslintcache
@@ -34,3 +35,6 @@ pnpm-debug.log*
 
 # Local
 tmp/
+
+# Generated example artifacts
+examples/examples/

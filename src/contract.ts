@@ -12,6 +12,7 @@ import {
 } from 'viem';
 import { core4micaAbi } from './abi/core4mica';
 import { getChain } from './chain';
+import { ContractError } from './errors';
 import { parseU256, hexFromBytes } from './utils';
 
 type TPublicClient = ReturnType<typeof createPublicClient>;
@@ -64,7 +65,7 @@ export class ContractGateway {
 
     const rpcChainId = await publicClient.getChainId();
     if (rpcChainId !== Number(chainId)) {
-      throw new Error(`Connected to chain ${rpcChainId}, expected ${chainId}`);
+      throw new ContractError(`Connected to chain ${rpcChainId}, expected ${chainId}`);
     }
 
     const walletClient = createWalletClient({
@@ -152,7 +153,11 @@ export class ContractGateway {
   }
 
   async getUserAssets() {
-    const addr = this.walletClient.account!.address;
+    const account = this.walletClient.account;
+    if (!account) {
+      throw new ContractError('wallet client has no account configured');
+    }
+    const addr = account.address;
     const result = await this.contract.read.getUserAllAssets([addr]);
     return result.map((a) => ({
       asset: a.asset,

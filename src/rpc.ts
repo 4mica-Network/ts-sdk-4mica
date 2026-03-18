@@ -1,6 +1,11 @@
 import { ADMIN_API_KEY_HEADER } from './constants';
-import { AdminApiKeyInfo, AdminApiKeySecret, UserSuspensionStatus } from './models';
-import { CorePublicParameters } from './models';
+import {
+  AdminApiKeyInfo,
+  AdminApiKeySecret,
+  CorePublicParameters,
+  SupportedTokensResponse,
+  UserSuspensionStatus,
+} from './models';
 import { RpcError } from './errors';
 import { normalizeBaseUrl, requestJson, type FetchFn as HttpFetchFn } from './http';
 
@@ -107,6 +112,11 @@ export class RpcProxy {
   async getPublicParams(): Promise<CorePublicParameters> {
     const data = await this.get<Record<string, unknown>>('/core/public-params');
     return CorePublicParameters.fromRpc(data);
+  }
+
+  async getSupportedTokens(): Promise<SupportedTokensResponse> {
+    const data = await this.get<Record<string, unknown>>('/core/tokens');
+    return SupportedTokensResponse.fromRpc(data);
   }
 
   async issueGuarantee(body: unknown): Promise<Record<string, unknown>> {

@@ -1,5 +1,5 @@
 import { PaymentSignature } from '../models';
-import type { PaymentPayload, PaymentPayloadClaims } from '../payment';
+import type { PaymentPayload } from '../payment';
 
 export interface PaymentRequirementsV1 {
   scheme: string;
@@ -44,7 +44,7 @@ export interface TabResponse {
   nextReqId?: string;
 }
 
-export type X402PaymentPayloadClaims = PaymentPayloadClaims;
+export type X402PaymentPayloadClaims = PaymentPayload['claims'];
 
 export type X402PaymentPayload = PaymentPayload;
 

@@ -36,16 +36,6 @@ export const core4micaAbi = [
           },
         ],
       },
-      {
-        name: 'usdc_',
-        type: 'address',
-        internalType: 'address',
-      },
-      {
-        name: 'usdt_',
-        type: 'address',
-        internalType: 'address',
-      },
     ],
     stateMutability: 'nonpayable',
   },
@@ -94,32 +84,6 @@ export const core4micaAbi = [
         name: '',
         type: 'uint64',
         internalType: 'uint64',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'USDC',
-    inputs: [],
-    outputs: [
-      {
-        name: '',
-        type: 'address',
-        internalType: 'address',
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'USDT',
-    inputs: [],
-    outputs: [
-      {
-        name: '',
-        type: 'address',
-        internalType: 'address',
       },
     ],
     stateMutability: 'view',

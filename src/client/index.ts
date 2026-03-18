@@ -9,13 +9,36 @@ import { PaymentSigner } from '../signing';
 import { RecipientClient } from './recipient';
 import { UserClient } from './user';
 
+/**
+ * Top-level SDK client. Holds a live connection to the 4Mica core RPC and the
+ * on-chain Core4Mica contract. Obtain an instance via {@link Client.new}.
+ *
+ * @example
+ * ```ts
+ * const cfg = new ConfigBuilder().walletPrivateKey("0x...").build();
+ * const client = await Client.new(cfg);
+ * try {
+ *   // client.user  – payer-side operations
+ *   // client.recipient – recipient-side operations
+ * } finally {
+ *   await client.aclose();
+ * }
+ * ```
+ */
 export class Client {
+  /** Low-level RPC proxy to the 4Mica core service. */
   readonly rpc: RpcProxy;
+  /** Chain and contract parameters fetched from the core service at startup. */
   readonly params: CorePublicParameters;
+  /** viem-backed gateway for on-chain calls (deposit, remunerate, …). */
   readonly gateway: ContractGateway;
+  /** 32-byte domain separator used to verify V1 BLS guarantee certificates. */
   readonly guaranteeDomain: string;
+  /** Payer-side operations: deposit, sign, withdraw. */
   readonly user: UserClient;
+  /** Recipient-side operations: tabs, guarantees, remuneration. */
   readonly recipient: RecipientClient;
+  /** Payment signing wrapper around the configured viem Account. */
   readonly signer: PaymentSigner;
   private authSession?: AuthSession;
 
@@ -37,6 +60,17 @@ export class Client {
     this.recipient = new RecipientClient(this);
   }
 
+  /**
+   * Create and fully initialise a Client.
+   *
+   * Fetches public parameters from the core service, validates that the
+   * Ethereum RPC is on the expected chain, and sets up SIWE auth if configured.
+   *
+   * @param cfg - Validated configuration produced by {@link ConfigBuilder.build}.
+   * @throws {@link ConfigError} if the configuration is invalid.
+   * @throws {@link RpcError} if the core service is unreachable.
+   * @throws {@link ContractError} if the Ethereum RPC returns the wrong chain ID.
+   */
   static async new(cfg: Config): Promise<Client> {
     const rpc = new RpcProxy(cfg.rpcUrl, cfg.adminApiKey);
     const params = await rpc.getPublicParams();
@@ -77,10 +111,22 @@ export class Client {
     );
   }
 
+  /**
+   * Release client resources. Safe to call multiple times.
+   * Use in a `finally` block to ensure cleanup after use.
+   */
   async aclose(): Promise<void> {
     await this.rpc.aclose();
   }
 
+  /**
+   * Perform an explicit SIWE login and return the resulting tokens.
+   *
+   * Not required for normal operation — the first authenticated RPC call
+   * triggers auth automatically. Call this to pre-warm the session.
+   *
+   * @throws {@link AuthMissingConfigError} if auth was not enabled in the config.
+   */
   async login(): Promise<AuthTokens> {
     if (!this.authSession) {
       throw new AuthMissingConfigError('auth is not enabled');

@@ -9,6 +9,7 @@ import {
   PaymentGuaranteeRequestClaimsV2,
   PendingRemunerationInfo,
   RecipientPaymentInfo,
+  SupportedTokensResponse,
   TabInfo,
   UserSuspensionStatus,
 } from '../src/models';
@@ -200,7 +201,9 @@ const V2_BASE = {
 
 describe('PaymentGuaranteeRequestClaimsV2 boundaries', () => {
   it('accepts minValidationScore=1 (lower boundary)', () => {
-    expect(() => new PaymentGuaranteeRequestClaimsV2({ ...V2_BASE, minValidationScore: 1 })).not.toThrow();
+    expect(
+      () => new PaymentGuaranteeRequestClaimsV2({ ...V2_BASE, minValidationScore: 1 })
+    ).not.toThrow();
   });
 
   it('accepts minValidationScore=100 (upper boundary)', () => {
@@ -238,5 +241,54 @@ describe('CorePublicParameters.fromRpc', () => {
       chain_id: 1,
     });
     expect(params.publicKey).toEqual(new Uint8Array());
+  });
+
+  it('parses current core public-params fields exposed by rpc', () => {
+    const params = CorePublicParameters.fromRpc({
+      public_key: [1, 2, 3],
+      contract_address: '0x0000000000000000000000000000000000000000',
+      ethereum_http_rpc_url: 'https://rpc.example.com',
+      eip712_name: '4mica',
+      eip712_version: '1',
+      chain_id: 84532,
+      max_accepted_guarantee_version: 2,
+      accepted_guarantee_versions: [1, 2],
+      active_guarantee_domain_separator: '0x' + '11'.repeat(32),
+      trusted_validation_registries: ['0x0000000000000000000000000000000000000011'],
+      validation_hash_canonicalization_version: '4MICA_VALIDATION_REQUEST_V1',
+    });
+
+    expect(params.maxAcceptedGuaranteeVersion).toBe(2);
+    expect(params.acceptedGuaranteeVersions).toEqual([1, 2]);
+    expect(params.activeGuaranteeDomainSeparator).toBe('0x' + '11'.repeat(32));
+    expect(params.trustedValidationRegistries).toEqual([
+      '0x0000000000000000000000000000000000000011',
+    ]);
+    expect(params.validationHashCanonicalizationVersion).toBe(
+      '4MICA_VALIDATION_REQUEST_V1'
+    );
+  });
+});
+
+describe('SupportedTokensResponse.fromRpc', () => {
+  it('parses supported tokens payload', () => {
+    const response = SupportedTokensResponse.fromRpc({
+      chain_id: 84532,
+      tokens: [
+        {
+          symbol: 'USDC',
+          address: '0x0000000000000000000000000000000000000001',
+          decimals: 6,
+        },
+      ],
+    });
+    expect(response.chainId).toBe(84532);
+    expect(response.tokens).toEqual([
+      {
+        symbol: 'USDC',
+        address: '0x0000000000000000000000000000000000000001',
+        decimals: 6,
+      },
+    ]);
   });
 });

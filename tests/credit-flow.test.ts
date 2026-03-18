@@ -163,13 +163,19 @@ describe('credit-flow coverage', () => {
 
   it('creates tabs and normalizes ids', async () => {
     const rpc = {
-      createPaymentTab: vi.fn().mockResolvedValue({ id: '0x10' }),
+      createPaymentTab: vi.fn().mockResolvedValue({
+        id: '0x10',
+        erc20_token: ASSET,
+        next_req_id: '0x1',
+      }),
     } as unknown as RpcProxy;
     const client = buildClientStub({ rpc });
     const recipient = new RecipientClient(client);
 
-    const tabId = await recipient.createTab(USER, RECIPIENT, ASSET, 60);
-    expect(tabId).toBe(16n);
+    const result = await recipient.createTab(USER, RECIPIENT, ASSET, 60);
+    expect(result.tabId).toBe(16n);
+    expect(result.assetAddress).toBe(ASSET);
+    expect(result.nextReqId).toBe(1n);
   });
 
   it('builds payment payload with V2 claims', () => {
@@ -280,15 +286,17 @@ describe('credit-flow coverage', () => {
     ).rejects.toThrow(VerificationError);
   });
 
-  it('createTab returns 0n when response has no id field', async () => {
+  it('createTab returns 0n tabId and zero assetAddress when response has no fields', async () => {
     const rpc = {
       createPaymentTab: vi.fn().mockResolvedValue({}),
     } as unknown as RpcProxy;
     const client = buildClientStub({ rpc });
     const recipient = new RecipientClient(client);
 
-    const tabId = await recipient.createTab(USER, RECIPIENT, ASSET, 60);
-    expect(tabId).toBe(0n);
+    const result = await recipient.createTab(USER, RECIPIENT, ASSET, 60);
+    expect(result.tabId).toBe(0n);
+    expect(result.assetAddress).toBe('0x0000000000000000000000000000000000000000');
+    expect(result.nextReqId).toBe(0n);
   });
 
   it('rejects invalid remuneration signature types', async () => {

@@ -82,6 +82,12 @@ const loadCurvesSync = (): BlsModule => {
   }
 };
 
+const isBlsModule = (mod: unknown): mod is BlsModule =>
+  mod !== null &&
+  typeof mod === 'object' &&
+  'bls12_381' in mod &&
+  typeof (mod as Record<string, unknown>).bls12_381 === 'object';
+
 const loadCurvesAsync = async (): Promise<BlsModule> => {
   if (curvesCache) return curvesCache;
   if (curvesPromise) return curvesPromise;
@@ -91,7 +97,10 @@ const loadCurvesAsync = async (): Promise<BlsModule> => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       return require('@noble/curves/bls12-381') as BlsModule;
     } catch {
-      const mod = (await import('@noble/curves/bls12-381.js')) as unknown as BlsModule;
+      const mod: unknown = await import('@noble/curves/bls12-381.js');
+      if (!isBlsModule(mod)) {
+        throw new VerificationError('BLS decoding: unexpected module shape from @noble/curves');
+      }
       return mod;
     }
   })();
@@ -140,7 +149,11 @@ const normalizeSignature = (input: unknown): { hex: string; bytes: Uint8Array } 
   if (input && typeof input === 'object') {
     const record = input as Record<string, unknown>;
     if (Array.isArray(record.data)) {
-      const bytes = Uint8Array.from(record.data as number[]);
+      const arr = record.data as unknown[];
+      if (arr.some((b) => typeof b !== 'number' || b < 0 || b > 255 || !Number.isInteger(b))) {
+        throw new VerificationError('signature data array contains invalid byte values');
+      }
+      const bytes = Uint8Array.from(arr as number[]);
       const hex = Buffer.from(bytes).toString('hex');
       return { hex, bytes };
     }
