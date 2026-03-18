@@ -142,9 +142,7 @@ describe('guarantee codec', () => {
     expect(decoded.reqId).toBe(3n);
     expect(decoded.amount).toBe(1000n);
     expect(decoded.totalAmount).toBe(1000n);
-    expect(decoded.assetAddress.toLowerCase()).toBe(
-      '0x036cbd53842c5426634e7929541ec2318f3dcf7e'
-    );
+    expect(decoded.assetAddress.toLowerCase()).toBe('0x036cbd53842c5426634e7929541ec2318f3dcf7e');
     expect(decoded.validationPolicy?.validationChainId).toBe(84532);
     expect(decoded.validationPolicy?.validatorAgentId).toBe(1n);
     expect(decoded.validationPolicy?.minValidationScore).toBe(80);

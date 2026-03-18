@@ -471,13 +471,10 @@ export class CorePublicParameters {
       (payload.eip712_name ?? payload.eip712Name ?? '4Mica') as string,
       (payload.eip712_version ?? payload.eip712Version ?? '1') as string,
       Number(payload.chain_id ?? payload.chainId),
-      Number(
-        payload.max_accepted_guarantee_version ?? payload.maxAcceptedGuaranteeVersion ?? 1
-      ),
+      Number(payload.max_accepted_guarantee_version ?? payload.maxAcceptedGuaranteeVersion ?? 1),
       Array.isArray(payload.accepted_guarantee_versions ?? payload.acceptedGuaranteeVersions)
         ? (
-            (payload.accepted_guarantee_versions ??
-              payload.acceptedGuaranteeVersions) as unknown[]
+            (payload.accepted_guarantee_versions ?? payload.acceptedGuaranteeVersions) as unknown[]
           ).map((version) => Number(version))
         : [],
       String(

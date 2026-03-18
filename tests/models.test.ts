@@ -264,9 +264,7 @@ describe('CorePublicParameters.fromRpc', () => {
     expect(params.trustedValidationRegistries).toEqual([
       '0x0000000000000000000000000000000000000011',
     ]);
-    expect(params.validationHashCanonicalizationVersion).toBe(
-      '4MICA_VALIDATION_REQUEST_V1'
-    );
+    expect(params.validationHashCanonicalizationVersion).toBe('4MICA_VALIDATION_REQUEST_V1');
   });
 });
 
