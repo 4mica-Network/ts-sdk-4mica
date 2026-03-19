@@ -1,4 +1,4 @@
-import { Account, encodeAbiParameters, keccak256, type Hex } from 'viem';
+import { Account, encodeAbiParameters, type Hex } from 'viem';
 export { computeValidationSubjectHash, computeValidationRequestHash } from './validation';
 import { SigningError } from './errors';
 import {
