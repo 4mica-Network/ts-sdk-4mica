@@ -309,10 +309,9 @@ export class ContractGateway {
       y_c1_b: hexFromBytes(signatureWords[7]),
     };
     const hash = await this.enqueueTx(() =>
-      this.contract.write.remunerate(
-        [hexFromBytes(claimsBlob), sigStruct],
-        { gas: gas ?? DEFAULT_REMUNERATE_GAS_LIMIT }
-      )
+      this.contract.write.remunerate([hexFromBytes(claimsBlob), sigStruct], {
+        gas: gas ?? DEFAULT_REMUNERATE_GAS_LIMIT,
+      })
     );
     return this.publicClient.waitForTransactionReceipt({ hash, ...receipt });
   }

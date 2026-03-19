@@ -12,10 +12,8 @@ import {
 import { computeValidationRequestHash, computeValidationSubjectHash } from '../src/validation';
 
 const DEFAULT_RPC_URL = 'http://127.0.0.1:3000/';
-const DEFAULT_PAYER_KEY =
-  '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
-const DEFAULT_RECIPIENT_KEY =
-  '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
+const DEFAULT_PAYER_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+const DEFAULT_RECIPIENT_KEY = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
 
 const e2eEnabled = process.env['4MICA_E2E'] === '1';
 const describeE2E = e2eEnabled ? describe : describe.skip;
@@ -36,7 +34,8 @@ const resolveTokenDecimalsOverride = (): number | undefined => {
 
 const describeAmount = (amount: bigint, decimals: number): string =>
   `${formatUnits(amount, decimals)} (${amount.toString()})`;
-const describeEthAmount = (amount: bigint): string => `${formatEther(amount)} (${amount.toString()})`;
+const describeEthAmount = (amount: bigint): string =>
+  `${formatEther(amount)} (${amount.toString()})`;
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 const toHex = (value: bigint): string => `0x${value.toString(16)}`;
 const previewHex = (value: string, bytes = 16): string => {
@@ -162,9 +161,7 @@ describeE2E('credit flow e2e', () => {
       throw new Error('user position context not initialised');
     }
     const assets = await payerClient.user.getUser();
-    return (
-      assets.find((asset) => asset.asset.toLowerCase() === tokenAddress.toLowerCase()) ?? null
-    );
+    return assets.find((asset) => asset.asset.toLowerCase() === tokenAddress.toLowerCase()) ?? null;
   };
 
   const waitForCoreAssetBalance = async (
@@ -358,535 +355,532 @@ describeE2E('credit flow e2e', () => {
     }
   });
 
-  it(
-    'tracks lock, unlock, remuneration, and withdrawal against the user deposit',
-    async () => {
-      const rpcUrl = resolveRpcUrl();
-      const payerCfg = new ConfigBuilder()
-        .rpcUrl(rpcUrl)
-        .walletPrivateKey(resolvePayerKey())
-        .enableAuth()
-        .build();
-      const recipientCfg = new ConfigBuilder()
-        .rpcUrl(rpcUrl)
-        .walletPrivateKey(resolveRecipientKey())
-        .enableAuth()
-        .build();
+  it('tracks lock, unlock, remuneration, and withdrawal against the user deposit', async () => {
+    const rpcUrl = resolveRpcUrl();
+    const payerCfg = new ConfigBuilder()
+      .rpcUrl(rpcUrl)
+      .walletPrivateKey(resolvePayerKey())
+      .enableAuth()
+      .build();
+    const recipientCfg = new ConfigBuilder()
+      .rpcUrl(rpcUrl)
+      .walletPrivateKey(resolveRecipientKey())
+      .enableAuth()
+      .build();
 
-      payerClient = await Client.new(payerCfg);
-      recipientClient = await Client.new(recipientCfg);
+    payerClient = await Client.new(payerCfg);
+    recipientClient = await Client.new(recipientCfg);
 
-      if (recipientCfg.signer.address.toLowerCase() === payerCfg.signer.address.toLowerCase()) {
-        throw new Error(
-          'recipient address matches payer address; set RECIPIENT_PRIVATE_KEY to a different funded local key'
-        );
-      }
+    if (recipientCfg.signer.address.toLowerCase() === payerCfg.signer.address.toLowerCase()) {
+      throw new Error(
+        'recipient address matches payer address; set RECIPIENT_PRIVATE_KEY to a different funded local key'
+      );
+    }
 
-      await payerClient.login();
-      await recipientClient.login();
+    await payerClient.login();
+    await recipientClient.login();
 
-      const token = await resolveTokenMetadata();
-      tokenAddress = token.address;
-      tokenDecimals = token.decimals;
-      const depositAmount = parseUnits(process.env['DEPOSIT_AMOUNT'] ?? '1.0', tokenDecimals);
-      const guaranteeAmount = parseUnits(
-        process.env['GUARANTEE_AMOUNT'] ?? '0.001',
+    const token = await resolveTokenMetadata();
+    tokenAddress = token.address;
+    tokenDecimals = token.decimals;
+    const depositAmount = parseUnits(process.env['DEPOSIT_AMOUNT'] ?? '1.0', tokenDecimals);
+    const guaranteeAmount = parseUnits(process.env['GUARANTEE_AMOUNT'] ?? '0.001', tokenDecimals);
+    payerAddress = payerCfg.signer.address;
+    recipientAddress = recipientCfg.signer.address;
+
+    await ensureRecipientNativeGas(recipientAddress as `0x${string}`);
+
+    logStep('Setup', {
+      rpcUrl,
+      payerAddress,
+      recipientAddress,
+      tokenAddress,
+      tokenDecimals,
+      depositAmount: describeAmount(depositAmount, tokenDecimals),
+      guaranteeAmount: describeAmount(guaranteeAmount, tokenDecimals),
+    });
+
+    const preDepositPosition = await getUserPosition();
+    const preDepositCollateral = preDepositPosition?.collateral ?? 0n;
+    const preDepositWithdrawalRequestAmount = preDepositPosition?.withdrawalRequestAmount ?? 0n;
+    const preDepositWithdrawalRequestTimestamp =
+      preDepositPosition?.withdrawalRequestTimestamp ?? 0;
+    const preDepositCoreBalance = await getCoreAssetBalanceOrZero();
+
+    const approveReceipt = await payerClient.user.approveErc20(tokenAddress, depositAmount);
+    logStep('Approve ERC20', {
+      tokenAddress,
+      amount: describeAmount(depositAmount, tokenDecimals),
+      transactionHash: approveReceipt.transactionHash,
+    });
+
+    const depositReceipt = await payerClient.user.deposit(depositAmount, tokenAddress);
+    logStep('Deposit collateral', {
+      tokenAddress,
+      amount: describeAmount(depositAmount, tokenDecimals),
+      transactionHash: depositReceipt.transactionHash,
+    });
+
+    const userAssets = await payerClient.user.getUser();
+    const position = userAssets.find(
+      (asset) => asset.asset.toLowerCase() === tokenAddress.toLowerCase()
+    );
+    expect(position, `expected user asset position for ${tokenAddress}`).toBeDefined();
+    expect(position!.collateral).toBe(preDepositCollateral + depositAmount);
+    expect(position!.withdrawalRequestAmount).toBe(preDepositWithdrawalRequestAmount);
+    expect(position!.withdrawalRequestTimestamp).toBe(preDepositWithdrawalRequestTimestamp);
+    logStep('User collateral', {
+      assetAddress: position!.asset,
+      collateral: describeAmount(position!.collateral, tokenDecimals),
+      withdrawalRequestAmount: describeAmount(position!.withdrawalRequestAmount, tokenDecimals),
+      withdrawalRequestTimestamp: position!.withdrawalRequestTimestamp,
+    });
+
+    const depositBalance = await waitForCoreAssetBalance(
+      'core balance after deposit',
+      (balance) =>
+        balance.total === preDepositCoreBalance.total + depositAmount &&
+        balance.locked === preDepositCoreBalance.locked,
+      90_000,
+      1_000,
+      { mineOnPoll: true }
+    );
+    logStep('Core asset balance after deposit', {
+      total: describeAmount(depositBalance.total, tokenDecimals),
+      locked: describeAmount(depositBalance.locked, tokenDecimals),
+      version: depositBalance.version,
+    });
+
+    const tabExpirationTime = Number(await payerClient.gateway.contract.read.tabExpirationTime());
+    tabTtlSeconds = await resolveEffectiveTabTtlSeconds();
+
+    const paidTab = await recipientClient.recipient.createTab(
+      payerAddress,
+      recipientAddress,
+      tokenAddress,
+      tabTtlSeconds || null
+    );
+    expect(paidTab.tabId > 0n).toBe(true);
+    expect(paidTab.assetAddress.toLowerCase()).toBe(tokenAddress.toLowerCase());
+    logStep('Create pay tab', {
+      tabId: toHex(paidTab.tabId),
+      nextReqId: toHex(paidTab.nextReqId),
+      assetAddress: paidTab.assetAddress,
+      ttlSeconds: tabTtlSeconds,
+      tabExpirationTime,
+    });
+
+    const paidClaims = PaymentGuaranteeRequestClaims.new(
+      payerAddress,
+      recipientAddress,
+      paidTab.tabId,
+      guaranteeAmount,
+      Math.floor(Date.now() / 1000),
+      paidTab.assetAddress,
+      paidTab.nextReqId
+    );
+    logStep('Build pay V1 claims', {
+      tabId: toHex(paidClaims.tabId),
+      reqId: toHex(paidClaims.reqId),
+      amount: toHex(paidClaims.amount),
+      timestamp: paidClaims.timestamp,
+      assetAddress: paidClaims.assetAddress,
+      userAddress: paidClaims.userAddress,
+      recipientAddress: paidClaims.recipientAddress,
+    });
+
+    const { signature: paidSignature, scheme: paidScheme } = await payerClient.user.signPayment(
+      paidClaims,
+      SigningScheme.EIP712
+    );
+    logStep('Sign pay V1 claims', {
+      scheme: paidScheme,
+      signature: previewHex(paidSignature),
+    });
+
+    const paidCert = await recipientClient.recipient.issuePaymentGuarantee(
+      paidClaims,
+      paidSignature,
+      paidScheme
+    );
+    logStep('Issue pay V1 guarantee', {
+      claims: previewHex(paidCert.claims, 24),
+      blsSignature: previewHex(paidCert.signature, 24),
+    });
+
+    const paidDecoded = await recipientClient.recipient.verifyPaymentGuarantee(paidCert);
+    logStep('Verify pay V1 guarantee', {
+      version: paidDecoded.version,
+      tabId: toHex(paidDecoded.tabId),
+      reqId: toHex(paidDecoded.reqId),
+      amount: toHex(paidDecoded.amount),
+      totalAmount: toHex(paidDecoded.totalAmount),
+      domain: previewHex(`0x${Buffer.from(paidDecoded.domain).toString('hex')}`, 16),
+    });
+
+    expect(paidDecoded.version).toBe(1);
+    expect(paidDecoded.tabId).toBe(paidTab.tabId);
+    expect(paidDecoded.reqId).toBe(paidTab.nextReqId);
+    expect(paidDecoded.amount).toBe(guaranteeAmount);
+    expect(paidDecoded.totalAmount).toBe(guaranteeAmount);
+
+    const lockedAfterGuarantee = await waitForCoreAssetBalance(
+      'lock after guarantee issuance',
+      (balance) =>
+        balance.total === depositBalance.total &&
+        balance.locked === depositBalance.locked + paidDecoded.amount
+    );
+    logStep('Core asset balance after guarantee lock', {
+      total: describeAmount(lockedAfterGuarantee.total, tokenDecimals),
+      locked: describeAmount(lockedAfterGuarantee.locked, tokenDecimals),
+      expectedLockedIncrease: describeAmount(paidDecoded.amount, tokenDecimals),
+    });
+
+    const payApproveReceipt = await payerClient.user.approveErc20(tokenAddress, paidDecoded.amount);
+    logStep('Approve ERC20 for payTab', {
+      tokenAddress,
+      amount: describeAmount(paidDecoded.amount, tokenDecimals),
+      transactionHash: payApproveReceipt.transactionHash,
+    });
+
+    const recipientTokenBalanceBefore = await getTokenBalance(recipientAddress as `0x${string}`);
+    const payReceipt = await payerClient.user.payTab(
+      paidTab.tabId,
+      paidTab.nextReqId,
+      paidDecoded.amount,
+      recipientAddress,
+      tokenAddress
+    );
+    logStep('Pay tab in ERC20', {
+      transactionHash: payReceipt.transactionHash,
+      tabId: toHex(paidTab.tabId),
+      reqId: toHex(paidTab.nextReqId),
+      amount: describeAmount(paidDecoded.amount, tokenDecimals),
+    });
+
+    await mineConfirmationBlock('Mine confirmation block after payTab');
+
+    const recipientTokenBalanceAfter = await getTokenBalance(recipientAddress as `0x${string}`);
+    logStep('Recipient ERC20 balance after payTab', {
+      before: describeAmount(recipientTokenBalanceBefore, tokenDecimals),
+      after: describeAmount(recipientTokenBalanceAfter, tokenDecimals),
+      increase: describeAmount(
+        recipientTokenBalanceAfter - recipientTokenBalanceBefore,
         tokenDecimals
-      );
-      payerAddress = payerCfg.signer.address;
-      recipientAddress = recipientCfg.signer.address;
+      ),
+    });
+    expect(recipientTokenBalanceAfter - recipientTokenBalanceBefore).toBe(paidDecoded.amount);
 
-      await ensureRecipientNativeGas(recipientAddress as `0x${string}`);
+    const paymentSyncTimeoutMs = Number(process.env['PAYMENT_SYNC_TIMEOUT_MS'] ?? '150000');
+    const requirePaymentFinalization = process.env['4MICA_REQUIRE_PAYMENT_FINALIZATION'] !== '0';
+    const paymentFinalizationTimeoutMs = Number(
+      process.env['PAYMENT_FINALIZATION_TIMEOUT_MS'] ??
+        (requirePaymentFinalization ? '210000' : '15000')
+    );
+    const synchronizedStatus = await waitForTabPaymentStatus(
+      'payment is recorded',
+      (status) =>
+        status.paid === paidDecoded.amount &&
+        !status.remunerated &&
+        status.asset.toLowerCase() === tokenAddress.toLowerCase(),
+      paidTab.tabId,
+      paymentSyncTimeoutMs,
+      1_000,
+      { mineOnPoll: true }
+    );
+    logStep('Paid tab payment status', {
+      paid: describeAmount(synchronizedStatus.paid, tokenDecimals),
+      remunerated: synchronizedStatus.remunerated,
+      asset: synchronizedStatus.asset,
+    });
+    expect(synchronizedStatus.paid).toBe(paidDecoded.amount);
+    expect(synchronizedStatus.remunerated).toBe(false);
 
-      logStep('Setup', {
-        rpcUrl,
-        payerAddress,
-        recipientAddress,
-        tokenAddress,
-        tokenDecimals,
-        depositAmount: describeAmount(depositAmount, tokenDecimals),
-        guaranteeAmount: describeAmount(guaranteeAmount, tokenDecimals),
-      });
+    const recipientPayments = await recipientClient.recipient.listRecipientPayments();
+    const recordedPayment = recipientPayments.find(
+      (payment) => payment.txHash.toLowerCase() === payReceipt.transactionHash.toLowerCase()
+    );
+    expect(
+      recordedPayment,
+      `expected recipient payment row for ${payReceipt.transactionHash}`
+    ).toBeDefined();
+    expect(recordedPayment!.amount).toBe(paidDecoded.amount);
+    expect(recordedPayment!.failed).toBe(false);
+    logStep('Recipient payment row', {
+      txHash: recordedPayment!.txHash,
+      amount: describeAmount(recordedPayment!.amount, tokenDecimals),
+      verified: recordedPayment!.verified,
+      finalized: recordedPayment!.finalized,
+      failed: recordedPayment!.failed,
+    });
 
-      const preDepositPosition = await getUserPosition();
-      const preDepositCollateral = preDepositPosition?.collateral ?? 0n;
-      const preDepositWithdrawalRequestAmount = preDepositPosition?.withdrawalRequestAmount ?? 0n;
-      const preDepositWithdrawalRequestTimestamp = preDepositPosition?.withdrawalRequestTimestamp ?? 0;
-      const preDepositCoreBalance = await getCoreAssetBalanceOrZero();
-
-      const approveReceipt = await payerClient.user.approveErc20(tokenAddress, depositAmount);
-      logStep('Approve ERC20', {
-        tokenAddress,
-        amount: describeAmount(depositAmount, tokenDecimals),
-        transactionHash: approveReceipt.transactionHash,
-      });
-
-      const depositReceipt = await payerClient.user.deposit(depositAmount, tokenAddress);
-      logStep('Deposit collateral', {
-        tokenAddress,
-        amount: describeAmount(depositAmount, tokenDecimals),
-        transactionHash: depositReceipt.transactionHash,
-      });
-
-      const userAssets = await payerClient.user.getUser();
-      const position = userAssets.find(
-        (asset) => asset.asset.toLowerCase() === tokenAddress.toLowerCase()
-      );
-      expect(position, `expected user asset position for ${tokenAddress}`).toBeDefined();
-      expect(position!.collateral).toBe(preDepositCollateral + depositAmount);
-      expect(position!.withdrawalRequestAmount).toBe(preDepositWithdrawalRequestAmount);
-      expect(position!.withdrawalRequestTimestamp).toBe(preDepositWithdrawalRequestTimestamp);
-      logStep('User collateral', {
-        assetAddress: position!.asset,
-        collateral: describeAmount(position!.collateral, tokenDecimals),
-        withdrawalRequestAmount: describeAmount(position!.withdrawalRequestAmount, tokenDecimals),
-        withdrawalRequestTimestamp: position!.withdrawalRequestTimestamp,
-      });
-
-      const depositBalance = await waitForCoreAssetBalance(
-        'core balance after deposit',
+    try {
+      const unlockedAfterPayment = await waitForCoreAssetBalance(
+        'unlock after ERC20 payment is finalized',
         (balance) =>
-          balance.total === preDepositCoreBalance.total + depositAmount &&
-          balance.locked === preDepositCoreBalance.locked,
-        90_000,
+          balance.total === lockedAfterGuarantee.total &&
+          balance.locked === lockedAfterGuarantee.locked - paidDecoded.amount,
+        paymentFinalizationTimeoutMs,
         1_000,
         { mineOnPoll: true }
       );
-      logStep('Core asset balance after deposit', {
-        total: describeAmount(depositBalance.total, tokenDecimals),
-        locked: describeAmount(depositBalance.locked, tokenDecimals),
-        version: depositBalance.version,
+      logStep('Core asset balance after payment unlock', {
+        total: describeAmount(unlockedAfterPayment.total, tokenDecimals),
+        locked: describeAmount(unlockedAfterPayment.locked, tokenDecimals),
       });
-
-      const tabExpirationTime = Number(await payerClient.gateway.contract.read.tabExpirationTime());
-      tabTtlSeconds = await resolveEffectiveTabTtlSeconds();
-
-      const paidTab = await recipientClient.recipient.createTab(
-        payerAddress,
-        recipientAddress,
-        tokenAddress,
-        tabTtlSeconds || null
-      );
-      expect(paidTab.tabId > 0n).toBe(true);
-      expect(paidTab.assetAddress.toLowerCase()).toBe(tokenAddress.toLowerCase());
-      logStep('Create pay tab', {
-        tabId: toHex(paidTab.tabId),
-        nextReqId: toHex(paidTab.nextReqId),
-        assetAddress: paidTab.assetAddress,
-        ttlSeconds: tabTtlSeconds,
-        tabExpirationTime,
+    } catch (error) {
+      const coreBalance = await getCoreAssetBalance();
+      logStep('Payment finalization not observed within timeout', {
+        timeoutMs: paymentFinalizationTimeoutMs,
+        requirePaymentFinalization,
+        coreTotal: describeAmount(coreBalance.total, tokenDecimals),
+        coreLocked: describeAmount(coreBalance.locked, tokenDecimals),
+        reason: error instanceof Error ? error.message : String(error),
       });
-
-      const paidClaims = PaymentGuaranteeRequestClaims.new(
-        payerAddress,
-        recipientAddress,
-        paidTab.tabId,
-        guaranteeAmount,
-        Math.floor(Date.now() / 1000),
-        paidTab.assetAddress,
-        paidTab.nextReqId
-      );
-      logStep('Build pay V1 claims', {
-        tabId: toHex(paidClaims.tabId),
-        reqId: toHex(paidClaims.reqId),
-        amount: toHex(paidClaims.amount),
-        timestamp: paidClaims.timestamp,
-        assetAddress: paidClaims.assetAddress,
-        userAddress: paidClaims.userAddress,
-        recipientAddress: paidClaims.recipientAddress,
-      });
-
-      const { signature: paidSignature, scheme: paidScheme } = await payerClient.user.signPayment(
-        paidClaims,
-        SigningScheme.EIP712
-      );
-      logStep('Sign pay V1 claims', {
-        scheme: paidScheme,
-        signature: previewHex(paidSignature),
-      });
-
-      const paidCert = await recipientClient.recipient.issuePaymentGuarantee(
-        paidClaims,
-        paidSignature,
-        paidScheme
-      );
-      logStep('Issue pay V1 guarantee', {
-        claims: previewHex(paidCert.claims, 24),
-        blsSignature: previewHex(paidCert.signature, 24),
-      });
-
-      const paidDecoded = await recipientClient.recipient.verifyPaymentGuarantee(paidCert);
-      logStep('Verify pay V1 guarantee', {
-        version: paidDecoded.version,
-        tabId: toHex(paidDecoded.tabId),
-        reqId: toHex(paidDecoded.reqId),
-        amount: toHex(paidDecoded.amount),
-        totalAmount: toHex(paidDecoded.totalAmount),
-        domain: previewHex(`0x${Buffer.from(paidDecoded.domain).toString('hex')}`, 16),
-      });
-
-      expect(paidDecoded.version).toBe(1);
-      expect(paidDecoded.tabId).toBe(paidTab.tabId);
-      expect(paidDecoded.reqId).toBe(paidTab.nextReqId);
-      expect(paidDecoded.amount).toBe(guaranteeAmount);
-      expect(paidDecoded.totalAmount).toBe(guaranteeAmount);
-
-      const lockedAfterGuarantee = await waitForCoreAssetBalance(
-        'lock after guarantee issuance',
-        (balance) =>
-          balance.total === depositBalance.total &&
-          balance.locked === depositBalance.locked + paidDecoded.amount
-      );
-      logStep('Core asset balance after guarantee lock', {
-        total: describeAmount(lockedAfterGuarantee.total, tokenDecimals),
-        locked: describeAmount(lockedAfterGuarantee.locked, tokenDecimals),
-        expectedLockedIncrease: describeAmount(paidDecoded.amount, tokenDecimals),
-      });
-
-      const payApproveReceipt = await payerClient.user.approveErc20(tokenAddress, paidDecoded.amount);
-      logStep('Approve ERC20 for payTab', {
-        tokenAddress,
-        amount: describeAmount(paidDecoded.amount, tokenDecimals),
-        transactionHash: payApproveReceipt.transactionHash,
-      });
-
-      const recipientTokenBalanceBefore = await getTokenBalance(recipientAddress as `0x${string}`);
-      const payReceipt = await payerClient.user.payTab(
-        paidTab.tabId,
-        paidTab.nextReqId,
-        paidDecoded.amount,
-        recipientAddress,
-        tokenAddress
-      );
-      logStep('Pay tab in ERC20', {
-        transactionHash: payReceipt.transactionHash,
-        tabId: toHex(paidTab.tabId),
-        reqId: toHex(paidTab.nextReqId),
-        amount: describeAmount(paidDecoded.amount, tokenDecimals),
-      });
-
-      await mineConfirmationBlock('Mine confirmation block after payTab');
-
-      const recipientTokenBalanceAfter = await getTokenBalance(recipientAddress as `0x${string}`);
-      logStep('Recipient ERC20 balance after payTab', {
-        before: describeAmount(recipientTokenBalanceBefore, tokenDecimals),
-        after: describeAmount(recipientTokenBalanceAfter, tokenDecimals),
-        increase: describeAmount(recipientTokenBalanceAfter - recipientTokenBalanceBefore, tokenDecimals),
-      });
-      expect(recipientTokenBalanceAfter - recipientTokenBalanceBefore).toBe(paidDecoded.amount);
-
-      const paymentSyncTimeoutMs = Number(process.env['PAYMENT_SYNC_TIMEOUT_MS'] ?? '150000');
-      const requirePaymentFinalization =
-        process.env['4MICA_REQUIRE_PAYMENT_FINALIZATION'] !== '0';
-      const paymentFinalizationTimeoutMs = Number(
-        process.env['PAYMENT_FINALIZATION_TIMEOUT_MS'] ??
-          (requirePaymentFinalization ? '210000' : '15000')
-      );
-      const synchronizedStatus = await waitForTabPaymentStatus(
-        'payment is recorded',
-        (status) =>
-          status.paid === paidDecoded.amount &&
-          !status.remunerated &&
-          status.asset.toLowerCase() === tokenAddress.toLowerCase(),
-        paidTab.tabId,
-        paymentSyncTimeoutMs,
-        1_000,
-        { mineOnPoll: true }
-      );
-      logStep('Paid tab payment status', {
-        paid: describeAmount(synchronizedStatus.paid, tokenDecimals),
-        remunerated: synchronizedStatus.remunerated,
-        asset: synchronizedStatus.asset,
-      });
-      expect(synchronizedStatus.paid).toBe(paidDecoded.amount);
-      expect(synchronizedStatus.remunerated).toBe(false);
-
-      const recipientPayments = await recipientClient.recipient.listRecipientPayments();
-      const recordedPayment = recipientPayments.find(
-        (payment) => payment.txHash.toLowerCase() === payReceipt.transactionHash.toLowerCase()
-      );
-      expect(recordedPayment, `expected recipient payment row for ${payReceipt.transactionHash}`).toBeDefined();
-      expect(recordedPayment!.amount).toBe(paidDecoded.amount);
-      expect(recordedPayment!.failed).toBe(false);
-      logStep('Recipient payment row', {
-        txHash: recordedPayment!.txHash,
-        amount: describeAmount(recordedPayment!.amount, tokenDecimals),
-        verified: recordedPayment!.verified,
-        finalized: recordedPayment!.finalized,
-        failed: recordedPayment!.failed,
-      });
-
-      try {
-        const unlockedAfterPayment = await waitForCoreAssetBalance(
-          'unlock after ERC20 payment is finalized',
-          (balance) =>
-            balance.total === lockedAfterGuarantee.total &&
-            balance.locked === lockedAfterGuarantee.locked - paidDecoded.amount,
-          paymentFinalizationTimeoutMs,
-          1_000,
-          { mineOnPoll: true }
-        );
-        logStep('Core asset balance after payment unlock', {
-          total: describeAmount(unlockedAfterPayment.total, tokenDecimals),
-          locked: describeAmount(unlockedAfterPayment.locked, tokenDecimals),
-        });
-      } catch (error) {
-        const coreBalance = await getCoreAssetBalance();
-        logStep('Payment finalization not observed within timeout', {
-          timeoutMs: paymentFinalizationTimeoutMs,
-          requirePaymentFinalization,
-          coreTotal: describeAmount(coreBalance.total, tokenDecimals),
-          coreLocked: describeAmount(coreBalance.locked, tokenDecimals),
-          reason: error instanceof Error ? error.message : String(error),
-        });
-        if (requirePaymentFinalization) {
-          throw error;
-        }
+      if (requirePaymentFinalization) {
+        throw error;
       }
+    }
 
-      const remunerationFlowStartBalance = await getCoreAssetBalance();
+    const remunerationFlowStartBalance = await getCoreAssetBalance();
 
-      const tab = await recipientClient.recipient.createTab(
-        payerAddress,
-        recipientAddress,
-        tokenAddress,
-        tabTtlSeconds || null
-      );
-      expect(tab.tabId > 0n).toBe(true);
-      expect(tab.assetAddress.toLowerCase()).toBe(tokenAddress.toLowerCase());
-      logStep('Create remunerated tab', {
-        tabId: toHex(tab.tabId),
-        nextReqId: toHex(tab.nextReqId),
-        assetAddress: tab.assetAddress,
-        ttlSeconds: tabTtlSeconds,
-        tabExpirationTime,
-      });
+    const tab = await recipientClient.recipient.createTab(
+      payerAddress,
+      recipientAddress,
+      tokenAddress,
+      tabTtlSeconds || null
+    );
+    expect(tab.tabId > 0n).toBe(true);
+    expect(tab.assetAddress.toLowerCase()).toBe(tokenAddress.toLowerCase());
+    logStep('Create remunerated tab', {
+      tabId: toHex(tab.tabId),
+      nextReqId: toHex(tab.nextReqId),
+      assetAddress: tab.assetAddress,
+      ttlSeconds: tabTtlSeconds,
+      tabExpirationTime,
+    });
 
-      const claims = PaymentGuaranteeRequestClaims.new(
-        payerAddress,
-        recipientAddress,
-        tab.tabId,
-        guaranteeAmount,
-        Math.floor(Date.now() / 1000),
-        tab.assetAddress,
-        tab.nextReqId
-      );
-      logStep('Build remunerated V1 claims', {
-        tabId: toHex(claims.tabId),
-        reqId: toHex(claims.reqId),
-        amount: toHex(claims.amount),
-        timestamp: claims.timestamp,
-        assetAddress: claims.assetAddress,
-        userAddress: claims.userAddress,
-        recipientAddress: claims.recipientAddress,
-      });
+    const claims = PaymentGuaranteeRequestClaims.new(
+      payerAddress,
+      recipientAddress,
+      tab.tabId,
+      guaranteeAmount,
+      Math.floor(Date.now() / 1000),
+      tab.assetAddress,
+      tab.nextReqId
+    );
+    logStep('Build remunerated V1 claims', {
+      tabId: toHex(claims.tabId),
+      reqId: toHex(claims.reqId),
+      amount: toHex(claims.amount),
+      timestamp: claims.timestamp,
+      assetAddress: claims.assetAddress,
+      userAddress: claims.userAddress,
+      recipientAddress: claims.recipientAddress,
+    });
 
-      const { signature, scheme } = await payerClient.user.signPayment(claims, SigningScheme.EIP712);
-      logStep('Sign remunerated V1 claims', {
-        scheme,
-        signature: previewHex(signature),
-      });
+    const { signature, scheme } = await payerClient.user.signPayment(claims, SigningScheme.EIP712);
+    logStep('Sign remunerated V1 claims', {
+      scheme,
+      signature: previewHex(signature),
+    });
 
-      const cert = await recipientClient.recipient.issuePaymentGuarantee(claims, signature, scheme);
-      logStep('Issue remunerated V1 guarantee', {
-        claims: previewHex(cert.claims, 24),
-        blsSignature: previewHex(cert.signature, 24),
-      });
+    const cert = await recipientClient.recipient.issuePaymentGuarantee(claims, signature, scheme);
+    logStep('Issue remunerated V1 guarantee', {
+      claims: previewHex(cert.claims, 24),
+      blsSignature: previewHex(cert.signature, 24),
+    });
 
-      const decoded = await recipientClient.recipient.verifyPaymentGuarantee(cert);
-      logStep('Verify remunerated V1 guarantee', {
-        version: decoded.version,
-        tabId: toHex(decoded.tabId),
-        reqId: toHex(decoded.reqId),
-        amount: toHex(decoded.amount),
-        totalAmount: toHex(decoded.totalAmount),
-        domain: previewHex(`0x${Buffer.from(decoded.domain).toString('hex')}`, 16),
-      });
+    const decoded = await recipientClient.recipient.verifyPaymentGuarantee(cert);
+    logStep('Verify remunerated V1 guarantee', {
+      version: decoded.version,
+      tabId: toHex(decoded.tabId),
+      reqId: toHex(decoded.reqId),
+      amount: toHex(decoded.amount),
+      totalAmount: toHex(decoded.totalAmount),
+      domain: previewHex(`0x${Buffer.from(decoded.domain).toString('hex')}`, 16),
+    });
 
-      expect(decoded.version).toBe(1);
-      expect(decoded.tabId).toBe(tab.tabId);
-      expect(decoded.reqId).toBe(tab.nextReqId);
-      expect(decoded.amount).toBe(guaranteeAmount);
-      expect(decoded.totalAmount).toBe(decoded.amount);
+    expect(decoded.version).toBe(1);
+    expect(decoded.tabId).toBe(tab.tabId);
+    expect(decoded.reqId).toBe(tab.nextReqId);
+    expect(decoded.amount).toBe(guaranteeAmount);
+    expect(decoded.totalAmount).toBe(decoded.amount);
 
-      const balanceAfterRemGuarantee = await waitForCoreAssetBalance(
-        'lock before remuneration',
-        (balance) =>
-          balance.total === remunerationFlowStartBalance.total &&
-          balance.locked === remunerationFlowStartBalance.locked + decoded.amount
-      );
-      logStep('Core asset balance before remuneration', {
-        total: describeAmount(balanceAfterRemGuarantee.total, tokenDecimals),
-        locked: describeAmount(balanceAfterRemGuarantee.locked, tokenDecimals),
-      });
-      expect(balanceAfterRemGuarantee.total).toBe(remunerationFlowStartBalance.total);
+    const balanceAfterRemGuarantee = await waitForCoreAssetBalance(
+      'lock before remuneration',
+      (balance) =>
+        balance.total === remunerationFlowStartBalance.total &&
+        balance.locked === remunerationFlowStartBalance.locked + decoded.amount
+    );
+    logStep('Core asset balance before remuneration', {
+      total: describeAmount(balanceAfterRemGuarantee.total, tokenDecimals),
+      locked: describeAmount(balanceAfterRemGuarantee.locked, tokenDecimals),
+    });
+    expect(balanceAfterRemGuarantee.total).toBe(remunerationFlowStartBalance.total);
 
-      const remunerationGracePeriod = Number(
-        await payerClient.gateway.contract.read.remunerationGracePeriod()
-      );
-      const synchronizationDelay = Number(
-        await payerClient.gateway.contract.read.synchronizationDelay()
-      );
-      const withdrawalGracePeriod = Number(
-        await payerClient.gateway.contract.read.withdrawalGracePeriod()
-      );
-      logStep('Contract timings', {
-        remunerationGracePeriod,
-        tabExpirationTime,
-        synchronizationDelay,
-        withdrawalGracePeriod,
-      });
+    const remunerationGracePeriod = Number(
+      await payerClient.gateway.contract.read.remunerationGracePeriod()
+    );
+    const synchronizationDelay = Number(
+      await payerClient.gateway.contract.read.synchronizationDelay()
+    );
+    const withdrawalGracePeriod = Number(
+      await payerClient.gateway.contract.read.withdrawalGracePeriod()
+    );
+    logStep('Contract timings', {
+      remunerationGracePeriod,
+      tabExpirationTime,
+      synchronizationDelay,
+      withdrawalGracePeriod,
+    });
 
-      const preRemunerationAssets = await payerClient.user.getUser();
-      const preRemunerationPosition = preRemunerationAssets.find(
-        (asset) => asset.asset.toLowerCase() === tokenAddress.toLowerCase()
-      );
-      expect(preRemunerationPosition).toBeDefined();
+    const preRemunerationAssets = await payerClient.user.getUser();
+    const preRemunerationPosition = preRemunerationAssets.find(
+      (asset) => asset.asset.toLowerCase() === tokenAddress.toLowerCase()
+    );
+    expect(preRemunerationPosition).toBeDefined();
 
-      const remunerateAt = claims.timestamp + remunerationGracePeriod + 1;
-      await waitUntilUnixTs('Remuneration grace period', remunerateAt);
+    const remunerateAt = claims.timestamp + remunerationGracePeriod + 1;
+    await waitUntilUnixTs('Remuneration grace period', remunerateAt);
 
-      const recipientTokenBalanceBeforeRemuneration = await getTokenBalance(
-        recipientAddress as `0x${string}`
-      );
-      const remunerateReceipt = await recipientClient.recipient.remunerate(cert);
-      logStep('Remunerate', {
-        transactionHash: remunerateReceipt.transactionHash,
-        tabId: toHex(decoded.tabId),
-        totalAmount: describeAmount(decoded.totalAmount, tokenDecimals),
-      });
+    const recipientTokenBalanceBeforeRemuneration = await getTokenBalance(
+      recipientAddress as `0x${string}`
+    );
+    const remunerateReceipt = await recipientClient.recipient.remunerate(cert);
+    logStep('Remunerate', {
+      transactionHash: remunerateReceipt.transactionHash,
+      tabId: toHex(decoded.tabId),
+      totalAmount: describeAmount(decoded.totalAmount, tokenDecimals),
+    });
 
-      const paymentStatus = await payerClient.user.getTabPaymentStatus(tab.tabId);
-      logStep('Tab payment status', {
-        paid: describeAmount(paymentStatus.paid, tokenDecimals),
-        remunerated: paymentStatus.remunerated,
-        asset: paymentStatus.asset,
-      });
-      expect(paymentStatus.paid).toBe(0n);
-      expect(paymentStatus.remunerated).toBe(true);
-      expect(paymentStatus.asset.toLowerCase()).toBe(tokenAddress.toLowerCase());
+    const paymentStatus = await payerClient.user.getTabPaymentStatus(tab.tabId);
+    logStep('Tab payment status', {
+      paid: describeAmount(paymentStatus.paid, tokenDecimals),
+      remunerated: paymentStatus.remunerated,
+      asset: paymentStatus.asset,
+    });
+    expect(paymentStatus.paid).toBe(0n);
+    expect(paymentStatus.remunerated).toBe(true);
+    expect(paymentStatus.asset.toLowerCase()).toBe(tokenAddress.toLowerCase());
 
-      const recipientTokenBalanceAfterRemuneration = await getTokenBalance(
-        recipientAddress as `0x${string}`
-      );
-      expect(recipientTokenBalanceAfterRemuneration - recipientTokenBalanceBeforeRemuneration).toBe(
-        decoded.totalAmount
-      );
+    const recipientTokenBalanceAfterRemuneration = await getTokenBalance(
+      recipientAddress as `0x${string}`
+    );
+    expect(recipientTokenBalanceAfterRemuneration - recipientTokenBalanceBeforeRemuneration).toBe(
+      decoded.totalAmount
+    );
 
-      const postRemunerationCoreBalance = await waitForCoreAssetBalance(
-        'core balance after remuneration',
-        (balance) =>
-          balance.total === balanceAfterRemGuarantee.total - decoded.totalAmount &&
-          balance.locked === balanceAfterRemGuarantee.locked - decoded.totalAmount,
-        90_000,
-        1_000,
-        { mineOnPoll: true }
-      );
-      logStep('Core asset balance after remuneration', {
-        total: describeAmount(postRemunerationCoreBalance.total, tokenDecimals),
-        locked: describeAmount(postRemunerationCoreBalance.locked, tokenDecimals),
-      });
+    const postRemunerationCoreBalance = await waitForCoreAssetBalance(
+      'core balance after remuneration',
+      (balance) =>
+        balance.total === balanceAfterRemGuarantee.total - decoded.totalAmount &&
+        balance.locked === balanceAfterRemGuarantee.locked - decoded.totalAmount,
+      90_000,
+      1_000,
+      { mineOnPoll: true }
+    );
+    logStep('Core asset balance after remuneration', {
+      total: describeAmount(postRemunerationCoreBalance.total, tokenDecimals),
+      locked: describeAmount(postRemunerationCoreBalance.locked, tokenDecimals),
+    });
 
-      const postRemunerationPosition = await getUserPosition();
-      expect(postRemunerationPosition).toBeDefined();
-      expect(preRemunerationPosition!.collateral >= decoded.totalAmount).toBe(true);
-      expect(postRemunerationPosition!.collateral).toBe(
-        preRemunerationPosition!.collateral - decoded.totalAmount
-      );
+    const postRemunerationPosition = await getUserPosition();
+    expect(postRemunerationPosition).toBeDefined();
+    expect(preRemunerationPosition!.collateral >= decoded.totalAmount).toBe(true);
+    expect(postRemunerationPosition!.collateral).toBe(
+      preRemunerationPosition!.collateral - decoded.totalAmount
+    );
 
-      const configuredWithdrawAmount = parseUnits(
-        process.env['WITHDRAW_AMOUNT'] ?? '0.0005',
+    const configuredWithdrawAmount = parseUnits(
+      process.env['WITHDRAW_AMOUNT'] ?? '0.0005',
+      tokenDecimals
+    );
+    const withdrawalAmount = minBigInt(
+      configuredWithdrawAmount,
+      postRemunerationPosition!.collateral
+    );
+    expect(withdrawalAmount > 0n).toBe(true);
+
+    const payerTokenBalanceBeforeWithdrawal = await getTokenBalance(payerAddress as `0x${string}`);
+    const requestReceipt = await payerClient.user.requestWithdrawal(withdrawalAmount, tokenAddress);
+    logStep('Request withdrawal', {
+      transactionHash: requestReceipt.transactionHash,
+      assetAddress: tokenAddress,
+      amount: describeAmount(withdrawalAmount, tokenDecimals),
+    });
+
+    const requestedAssets = await payerClient.user.getUser();
+    const requestedPosition = requestedAssets.find(
+      (asset) => asset.asset.toLowerCase() === tokenAddress.toLowerCase()
+    );
+    expect(requestedPosition).toBeDefined();
+    expect(requestedPosition!.collateral).toBe(postRemunerationPosition!.collateral);
+    expect(requestedPosition!.withdrawalRequestAmount).toBe(withdrawalAmount);
+    expect(requestedPosition!.withdrawalRequestTimestamp > 0).toBe(true);
+    logStep('Pending withdrawal state', {
+      collateral: describeAmount(requestedPosition!.collateral, tokenDecimals),
+      withdrawalRequestAmount: describeAmount(
+        requestedPosition!.withdrawalRequestAmount,
         tokenDecimals
-      );
-      const withdrawalAmount = minBigInt(
-        configuredWithdrawAmount,
-        postRemunerationPosition!.collateral
-      );
-      expect(withdrawalAmount > 0n).toBe(true);
+      ),
+      withdrawalRequestTimestamp: requestedPosition!.withdrawalRequestTimestamp,
+    });
 
-      const payerTokenBalanceBeforeWithdrawal = await getTokenBalance(payerAddress as `0x${string}`);
-      const requestReceipt = await payerClient.user.requestWithdrawal(withdrawalAmount, tokenAddress);
-      logStep('Request withdrawal', {
-        transactionHash: requestReceipt.transactionHash,
-        assetAddress: tokenAddress,
-        amount: describeAmount(withdrawalAmount, tokenDecimals),
-      });
+    const finalizeAt = requestedPosition!.withdrawalRequestTimestamp + withdrawalGracePeriod + 1;
+    await waitUntilUnixTs('Withdrawal grace period', finalizeAt);
 
-      const requestedAssets = await payerClient.user.getUser();
-      const requestedPosition = requestedAssets.find(
-        (asset) => asset.asset.toLowerCase() === tokenAddress.toLowerCase()
-      );
-      expect(requestedPosition).toBeDefined();
-      expect(requestedPosition!.collateral).toBe(postRemunerationPosition!.collateral);
-      expect(requestedPosition!.withdrawalRequestAmount).toBe(withdrawalAmount);
-      expect(requestedPosition!.withdrawalRequestTimestamp > 0).toBe(true);
-      logStep('Pending withdrawal state', {
-        collateral: describeAmount(requestedPosition!.collateral, tokenDecimals),
-        withdrawalRequestAmount: describeAmount(
-          requestedPosition!.withdrawalRequestAmount,
-          tokenDecimals
-        ),
-        withdrawalRequestTimestamp: requestedPosition!.withdrawalRequestTimestamp,
-      });
+    const expectedWithdrawalExecuted = minBigInt(
+      requestedPosition!.collateral,
+      requestedPosition!.withdrawalRequestAmount
+    );
+    const finalizeReceipt = await payerClient.user.finalizeWithdrawal(tokenAddress);
+    logStep('Finalize withdrawal', {
+      transactionHash: finalizeReceipt.transactionHash,
+      assetAddress: tokenAddress,
+      amount: describeAmount(expectedWithdrawalExecuted, tokenDecimals),
+    });
 
-      const finalizeAt = requestedPosition!.withdrawalRequestTimestamp + withdrawalGracePeriod + 1;
-      await waitUntilUnixTs('Withdrawal grace period', finalizeAt);
+    const payerTokenBalanceAfterWithdrawal = await getTokenBalance(payerAddress as `0x${string}`);
+    expect(payerTokenBalanceAfterWithdrawal - payerTokenBalanceBeforeWithdrawal).toBe(
+      expectedWithdrawalExecuted
+    );
 
-      const expectedWithdrawalExecuted = minBigInt(
-        requestedPosition!.collateral,
-        requestedPosition!.withdrawalRequestAmount
-      );
-      const finalizeReceipt = await payerClient.user.finalizeWithdrawal(tokenAddress);
-      logStep('Finalize withdrawal', {
-        transactionHash: finalizeReceipt.transactionHash,
-        assetAddress: tokenAddress,
-        amount: describeAmount(expectedWithdrawalExecuted, tokenDecimals),
-      });
+    const finalAssets = await payerClient.user.getUser();
+    const finalPosition = finalAssets.find(
+      (asset) => asset.asset.toLowerCase() === tokenAddress.toLowerCase()
+    );
+    expect(finalPosition).toBeDefined();
+    expect(finalPosition!.collateral).toBe(
+      requestedPosition!.collateral - expectedWithdrawalExecuted
+    );
+    expect(finalPosition!.withdrawalRequestAmount).toBe(0n);
+    expect(finalPosition!.withdrawalRequestTimestamp).toBe(0);
+    logStep('Final user state', {
+      collateral: describeAmount(finalPosition!.collateral, tokenDecimals),
+      withdrawalRequestAmount: describeAmount(
+        finalPosition!.withdrawalRequestAmount,
+        tokenDecimals
+      ),
+      withdrawalRequestTimestamp: finalPosition!.withdrawalRequestTimestamp,
+    });
 
-      const payerTokenBalanceAfterWithdrawal = await getTokenBalance(payerAddress as `0x${string}`);
-      expect(payerTokenBalanceAfterWithdrawal - payerTokenBalanceBeforeWithdrawal).toBe(
-        expectedWithdrawalExecuted
-      );
+    const finalCoreBalance = await waitForCoreAssetBalance(
+      'core balance after withdrawal finalize',
+      (balance) =>
+        balance.total === postRemunerationCoreBalance.total - expectedWithdrawalExecuted &&
+        balance.locked === postRemunerationCoreBalance.locked,
+      90_000,
+      1_000,
+      { mineOnPoll: true }
+    );
+    logStep('Core asset balance after withdrawal finalize', {
+      total: describeAmount(finalCoreBalance.total, tokenDecimals),
+      locked: describeAmount(finalCoreBalance.locked, tokenDecimals),
+    });
+  }, 420_000);
 
-      const finalAssets = await payerClient.user.getUser();
-      const finalPosition = finalAssets.find(
-        (asset) => asset.asset.toLowerCase() === tokenAddress.toLowerCase()
-      );
-      expect(finalPosition).toBeDefined();
-      expect(finalPosition!.collateral).toBe(
-        requestedPosition!.collateral - expectedWithdrawalExecuted
-      );
-      expect(finalPosition!.withdrawalRequestAmount).toBe(0n);
-      expect(finalPosition!.withdrawalRequestTimestamp).toBe(0);
-      logStep('Final user state', {
-        collateral: describeAmount(finalPosition!.collateral, tokenDecimals),
-        withdrawalRequestAmount: describeAmount(
-          finalPosition!.withdrawalRequestAmount,
-          tokenDecimals
-        ),
-        withdrawalRequestTimestamp: finalPosition!.withdrawalRequestTimestamp,
-      });
-
-      const finalCoreBalance = await waitForCoreAssetBalance(
-        'core balance after withdrawal finalize',
-        (balance) =>
-          balance.total === postRemunerationCoreBalance.total - expectedWithdrawalExecuted &&
-          balance.locked === postRemunerationCoreBalance.locked,
-        90_000,
-        1_000,
-        { mineOnPoll: true }
-      );
-      logStep('Core asset balance after withdrawal finalize', {
-        total: describeAmount(finalCoreBalance.total, tokenDecimals),
-        locked: describeAmount(finalCoreBalance.locked, tokenDecimals),
-      });
-    },
-    420_000
-  );
-
-  it(
-    'issues and verifies a V2 guarantee when validation config is available',
-    async () => {
+  it('issues and verifies a V2 guarantee when validation config is available', async () => {
     if (!payerClient || !recipientClient) {
       throw new Error('V1 e2e setup must run before V2 e2e');
     }
@@ -1031,7 +1025,5 @@ describeE2E('credit flow e2e', () => {
       validatorAddress.toLowerCase()
     );
     expect(decoded.validationPolicy?.validatorAgentId).toBe(validatorAgentId);
-    },
-    60_000
-  );
+  }, 60_000);
 });
