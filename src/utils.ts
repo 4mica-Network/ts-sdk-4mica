@@ -8,15 +8,16 @@ export class ValidationError extends Error {
 }
 
 export function validateUrl(raw: string): string {
+  let url: URL;
   try {
-    const url = new URL(raw);
-    if (!url.protocol || !url.host) {
-      throw new Error('missing parts');
-    }
-    return raw;
+    url = new URL(raw);
   } catch {
     throw new ValidationError(`invalid URL: ${raw}`);
   }
+  if (!url.protocol || !url.host) {
+    throw new ValidationError(`invalid URL: ${raw}`);
+  }
+  return raw;
 }
 
 export function normalizePrivateKey(raw: string): string {
@@ -28,15 +29,19 @@ export function normalizePrivateKey(raw: string): string {
 }
 
 export function normalizeAddress(raw: string): string {
-  const candidate: string = String(raw);
+  const candidate = String(raw);
   if (isAddress(candidate)) {
     return getAddress(candidate);
   }
-  const lower: string = (candidate as string).toLowerCase();
+  const lower = candidate.toLowerCase();
   if (isAddress(lower)) {
     return getAddress(lower);
   }
   throw new ValidationError(`invalid address: ${raw}`);
+}
+
+export function ensureHexPrefix(value: string): Hex {
+  return (value.startsWith('0x') ? value : `0x${value}`) as Hex;
 }
 
 function parseNumericString(raw: string): bigint {
@@ -52,6 +57,11 @@ export function parseU256(value: number | bigint | string): bigint {
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) {
       throw new ValidationError('invalid integer');
+    }
+    if (!Number.isSafeInteger(value)) {
+      throw new ValidationError(
+        'integer value exceeds safe precision; use bigint or hex string for large values'
+      );
     }
     if (value < 0) {
       throw new ValidationError('u256 cannot be negative');

@@ -13,6 +13,11 @@ describe('RpcProxy', () => {
       eip712Name: '4mica',
       eip712Version: '1',
       chainId: 1337,
+      maxAcceptedGuaranteeVersion: 2,
+      acceptedGuaranteeVersions: [1, 2],
+      activeGuaranteeDomainSeparator: '0x' + '11'.repeat(32),
+      trustedValidationRegistries: ['0x0000000000000000000000000000000000000011'],
+      validationHashCanonicalizationVersion: '4MICA_VALIDATION_REQUEST_V1',
     };
     const fetchMock = vi.fn<FetchFn>(async (input) => {
       const url = input.toString();
@@ -25,6 +30,36 @@ describe('RpcProxy', () => {
     expect(got.chainId).toBe(1337);
     expect(got.contractAddress).toBe(params.contractAddress);
     expect(got.ethereumHttpRpcUrl).toBe(params.ethereumHttpRpcUrl);
+    expect(got.maxAcceptedGuaranteeVersion).toBe(2);
+    expect(got.acceptedGuaranteeVersions).toEqual([1, 2]);
+    expect(got.activeGuaranteeDomainSeparator).toBe(params.activeGuaranteeDomainSeparator);
+    expect(got.trustedValidationRegistries).toEqual(params.trustedValidationRegistries);
+    expect(got.validationHashCanonicalizationVersion).toBe(
+      params.validationHashCanonicalizationVersion
+    );
+  });
+
+  it('gets supported tokens', async () => {
+    const payload = {
+      chain_id: 84532,
+      tokens: [
+        {
+          symbol: 'USDC',
+          address: '0x0000000000000000000000000000000000000001',
+          decimals: 6,
+        },
+      ],
+    };
+    const fetchMock = vi.fn<FetchFn>(async (input) => {
+      const url = input.toString();
+      expect(url.endsWith('/core/tokens')).toBe(true);
+      return new Response(JSON.stringify(payload), { status: 200 });
+    });
+
+    const proxy = new RpcProxy('http://example.com', undefined, fetchMock);
+    const got = await proxy.getSupportedTokens();
+    expect(got.chainId).toBe(84532);
+    expect(got.tokens).toEqual(payload.tokens);
   });
 
   it('surfaces api errors', async () => {

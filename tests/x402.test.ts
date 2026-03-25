@@ -275,6 +275,112 @@ describe('X402Flow', () => {
     );
   });
 
+  it('signPaymentV2 with validation policy produces V2 claims payload', async () => {
+    const flow = new StubX402Flow(new StubSigner());
+    const accepted: PaymentRequirementsV2 = {
+      scheme: SCHEME,
+      network: 'testnet',
+      amount: '10',
+      payTo: '0x0000000000000000000000000000000000000003',
+      asset: '0x0000000000000000000000000000000000000000',
+      extra: {
+        tabEndpoint: 'https://example.com',
+        validationRegistryAddress: '0x0000000000000000000000000000000000000011',
+        validationChainId: 1,
+        validatorAddress: '0x0000000000000000000000000000000000000022',
+        validatorAgentId: '7',
+        minValidationScore: 80,
+        requiredValidationTag: 'trust',
+      },
+    };
+    const paymentRequired: X402PaymentRequired = {
+      x402Version: 2,
+      resource: {
+        url: 'https://api.example.com/data',
+        description: 'desc',
+        mimeType: 'application/json',
+      },
+      accepts: [accepted],
+    };
+    const userAddress = '0x0000000000000000000000000000000000000001';
+    const signed = await flow.signPaymentV2(paymentRequired, accepted, userAddress);
+    const envelope = JSON.parse(Buffer.from(signed.header, 'base64').toString('utf8'));
+
+    expect(envelope.x402Version).toBe(2);
+    const claims = envelope.payload.claims;
+    expect(claims.version).toBe('v2');
+    expect(claims.validation_registry_address).toBe('0x0000000000000000000000000000000000000011');
+    expect(claims.validator_address).toBe('0x0000000000000000000000000000000000000022');
+    expect(claims.min_validation_score).toBe(80);
+    expect(claims.required_validation_tag).toBe('trust');
+    expect(typeof claims.validation_request_hash).toBe('string');
+    expect(typeof claims.validation_subject_hash).toBe('string');
+    expect(claims.validation_request_hash).not.toBe('0x' + '00'.repeat(32));
+  });
+
+  it('signPaymentV2 without validation policy falls back to V1 claims', async () => {
+    const flow = new StubX402Flow(new StubSigner());
+    const accepted: PaymentRequirementsV2 = {
+      scheme: SCHEME,
+      network: 'testnet',
+      amount: '10',
+      payTo: '0x0000000000000000000000000000000000000003',
+      asset: '0x0000000000000000000000000000000000000000',
+      extra: { tabEndpoint: 'https://example.com' },
+    };
+    const paymentRequired: X402PaymentRequired = {
+      x402Version: 2,
+      resource: {
+        url: 'https://api.example.com/data',
+        description: 'desc',
+        mimeType: 'application/json',
+      },
+      accepts: [accepted],
+    };
+    const signed = await flow.signPaymentV2(
+      paymentRequired,
+      accepted,
+      '0x0000000000000000000000000000000000000001'
+    );
+    const envelope = JSON.parse(Buffer.from(signed.header, 'base64').toString('utf8'));
+    expect(envelope.payload.claims.version).toBe('v1');
+  });
+
+  it('validation_request_hash is deterministic', async () => {
+    const flow = new StubX402Flow(new StubSigner());
+    const accepted: PaymentRequirementsV2 = {
+      scheme: SCHEME,
+      network: 'testnet',
+      amount: '10',
+      payTo: '0x0000000000000000000000000000000000000003',
+      asset: '0x0000000000000000000000000000000000000000',
+      extra: {
+        tabEndpoint: 'https://example.com',
+        validationRegistryAddress: '0x0000000000000000000000000000000000000011',
+        validationChainId: 1,
+        validatorAddress: '0x0000000000000000000000000000000000000022',
+        validatorAgentId: '7',
+        minValidationScore: 80,
+      },
+    };
+    const paymentRequired: X402PaymentRequired = {
+      x402Version: 2,
+      resource: {
+        url: 'https://api.example.com/data',
+        description: 'desc',
+        mimeType: 'application/json',
+      },
+      accepts: [accepted],
+    };
+    const userAddress = '0x0000000000000000000000000000000000000001';
+    const s1 = await flow.signPaymentV2(paymentRequired, accepted, userAddress);
+    const s2 = await flow.signPaymentV2(paymentRequired, accepted, userAddress);
+    const c1 = JSON.parse(Buffer.from(s1.header, 'base64').toString('utf8')).payload.claims;
+    const c2 = JSON.parse(Buffer.from(s2.header, 'base64').toString('utf8')).payload.claims;
+    expect(c1.validation_request_hash).toBe(c2.validation_request_hash);
+    expect(c1.validation_subject_hash).toBe(c2.validation_subject_hash);
+  });
+
   it('rejects v2 requirements without amount', async () => {
     const flow = new StubX402Flow(new StubSigner());
     const accepted = {

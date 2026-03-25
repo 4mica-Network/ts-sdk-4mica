@@ -2,17 +2,38 @@ import { Account, privateKeyToAccount } from 'viem/accounts';
 import { ConfigError } from './errors';
 import { ValidationError, normalizeAddress, normalizePrivateKey, validateUrl } from './utils';
 
+/** Validated configuration used to construct a {@link Client}. Produced by {@link ConfigBuilder.build}. */
 export interface Config {
+  /** URL of the 4Mica core RPC service. */
   rpcUrl: string;
+  /** viem `Account` used to sign payments and authenticate requests. */
   signer: Account;
+  /** Override for the Ethereum HTTP RPC URL (defaults to the value returned by the core service). */
   ethereumHttpRpcUrl?: string;
+  /** Override for the Core4Mica contract address (defaults to the value returned by the core service). */
   contractAddress?: string;
+  /** API key for admin-scoped RPC endpoints. */
   adminApiKey?: string;
+  /** Static bearer token for authenticated RPC calls. Mutually exclusive with SIWE auth. */
   bearerToken?: string;
+  /** URL of the SIWE authentication endpoint. Defaults to `rpcUrl` when auth is enabled. */
   authUrl?: string;
+  /** Seconds before token expiry at which the auth session proactively refreshes. Defaults to 60. */
   authRefreshMarginSecs?: number;
 }
 
+/**
+ * Fluent builder for {@link Config}.
+ *
+ * @example
+ * ```ts
+ * const cfg = new ConfigBuilder()
+ *   .walletPrivateKey('0x...')
+ *   .build();
+ * ```
+ *
+ * All fields can also be supplied from environment variables via {@link fromEnv}.
+ */
 export class ConfigBuilder {
   private _rpcUrl: string | undefined = 'https://api.4mica.xyz/';
   private _walletPrivateKey: string | undefined;
@@ -21,62 +42,85 @@ export class ConfigBuilder {
   private _contractAddress?: string;
   private _adminApiKey?: string;
   private _bearerToken?: string;
-  private _authEnabled = false;
+  private _authEnabled = true;
   private _authUrl?: string;
   private _authRefreshMarginSecs?: number;
 
+  /** Override the 4Mica core RPC URL. Defaults to `https://api.4mica.xyz/`. */
   rpcUrl(value: string): ConfigBuilder {
     this._rpcUrl = value;
     return this;
   }
 
+  /** Set the wallet private key (hex string). Mutually exclusive with {@link signer}. */
   walletPrivateKey(value: string): ConfigBuilder {
     this._walletPrivateKey = value;
     return this;
   }
 
+  /** Set a pre-built viem `Account` directly. Mutually exclusive with {@link walletPrivateKey}. */
   signer(value: Account): ConfigBuilder {
     this._signer = value;
     return this;
   }
 
+  /** Override the Ethereum HTTP RPC URL used for on-chain calls. */
   ethereumHttpRpcUrl(value: string): ConfigBuilder {
     this._ethereumHttpRpcUrl = value;
     return this;
   }
 
+  /** Override the Core4Mica contract address. */
   contractAddress(value: string): ConfigBuilder {
     this._contractAddress = value;
     return this;
   }
 
+  /** Set an admin API key for privileged RPC endpoints. */
   adminApiKey(value: string): ConfigBuilder {
     this._adminApiKey = value;
     return this;
   }
 
+  /** Set a static bearer token for authenticated RPC calls. Disables SIWE auth. */
   bearerToken(value: string): ConfigBuilder {
     this._bearerToken = value;
     return this;
   }
 
+  /** Enable SIWE authentication using the default RPC URL as the auth endpoint. Auth is enabled by default; this is a no-op unless you previously called a method that disabled it. */
   enableAuth(): ConfigBuilder {
     this._authEnabled = true;
     return this;
   }
 
+  /** Set a custom SIWE authentication endpoint and enable auth. */
   authUrl(value: string): ConfigBuilder {
     this._authUrl = value;
     this._authEnabled = true;
     return this;
   }
 
+  /** Set the number of seconds before token expiry at which the session proactively refreshes. Enables auth. */
   authRefreshMarginSecs(value: number): ConfigBuilder {
     this._authRefreshMarginSecs = value;
     this._authEnabled = true;
     return this;
   }
 
+  /**
+   * Load configuration from environment variables.
+   *
+   * Recognised variables:
+   * - `4MICA_RPC_URL`
+   * - `4MICA_WALLET_PRIVATE_KEY`
+   * - `4MICA_ETHEREUM_HTTP_RPC_URL`
+   * - `4MICA_CONTRACT_ADDRESS`
+   * - `4MICA_ADMIN_API_KEY`
+   * - `4MICA_BEARER_TOKEN`
+   * - `4MICA_AUTH_URL`
+   * - `4MICA_AUTH_REFRESH_MARGIN_SECS`
+   */
   fromEnv(): ConfigBuilder {
     const env = process.env;
     if (env['4MICA_RPC_URL']) this._rpcUrl = env['4MICA_RPC_URL'];
@@ -97,6 +141,12 @@ export class ConfigBuilder {
     return this;
   }
 
+  /**
+   * Validate all settings and return an immutable {@link Config}.
+   *
+   * @throws {@link ConfigError} if required fields are missing, URLs are invalid,
+   *   or the auth refresh margin is not a finite non-negative number.
+   */
   build(): Config {
     if (!this._signer && !this._walletPrivateKey) {
       throw new ConfigError('missing signer or wallet_private_key');

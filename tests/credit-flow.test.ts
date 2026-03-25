@@ -1,14 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
 import { privateKeyToAccount } from 'viem/accounts';
 import { encodeGuaranteeClaims } from '../src/guarantee';
-import { PaymentGuaranteeRequestClaims, SigningScheme } from '../src/models';
+import {
+  CorePublicParameters,
+  PaymentGuaranteeRequestClaims,
+  PaymentGuaranteeRequestClaimsV2,
+  SigningScheme,
+} from '../src/models';
+import { computeValidationSubjectHash, computeValidationRequestHash } from '../src/validation';
 import { buildPaymentPayload } from '../src/payment';
 import { RecipientClient } from '../src/client/recipient';
 import { UserClient } from '../src/client/user';
 import type { Client } from '../src/client';
 import type { ContractGateway } from '../src/contract';
 import type { RpcProxy } from '../src/rpc';
-import { CorePublicParameters } from '../src/signing';
 import { VerificationError } from '../src/errors';
 
 const USER = '0x0000000000000000000000000000000000000011';
@@ -92,7 +97,7 @@ describe('credit-flow coverage', () => {
     expect(cert.signature).toBe('0xdef');
   });
 
-  it('verifies guarantee domain and rejects mismatch', () => {
+  it('verifies guarantee domain and rejects mismatch', async () => {
     const domain = new Uint8Array(32);
     const encoded = encodeGuaranteeClaims({
       domain,
@@ -111,7 +116,7 @@ describe('credit-flow coverage', () => {
       guaranteeDomain: '0x' + Buffer.from(domain).toString('hex'),
     });
     const okRecipient = new RecipientClient(okClient);
-    const decoded = okRecipient.verifyPaymentGuarantee({
+    const decoded = await okRecipient.verifyPaymentGuarantee({
       claims: encoded,
       signature: '0x' + '11'.repeat(96),
     });
@@ -119,9 +124,9 @@ describe('credit-flow coverage', () => {
 
     const badClient = buildClientStub({ guaranteeDomain: '0x' + '11'.repeat(32) });
     const badRecipient = new RecipientClient(badClient);
-    expect(() =>
+    await expect(
       badRecipient.verifyPaymentGuarantee({ claims: encoded, signature: '0x' + '11'.repeat(96) })
-    ).toThrow(VerificationError);
+    ).rejects.toThrow(VerificationError);
   });
 
   it('maps tab payment status from gateway', async () => {
@@ -149,22 +154,149 @@ describe('credit-flow coverage', () => {
     const user = new UserClient(client);
 
     await user.payTab(1n, 2n, 3n, RECIPIENT, ASSET);
-    expect(payTabErc20).toHaveBeenCalledWith(1n, 3n, ASSET, RECIPIENT);
+    expect(payTabErc20).toHaveBeenCalledWith(1n, 3n, ASSET, RECIPIENT, undefined);
     expect(payTabEth).not.toHaveBeenCalled();
 
     await user.payTab(1n, 2n, 3n, RECIPIENT);
-    expect(payTabEth).toHaveBeenCalledWith(1n, 2n, 3n, RECIPIENT);
+    expect(payTabEth).toHaveBeenCalledWith(1n, 2n, 3n, RECIPIENT, undefined);
   });
 
   it('creates tabs and normalizes ids', async () => {
     const rpc = {
-      createPaymentTab: vi.fn().mockResolvedValue({ id: '0x10' }),
+      createPaymentTab: vi.fn().mockResolvedValue({
+        id: '0x10',
+        erc20_token: ASSET,
+        next_req_id: '0x1',
+      }),
     } as unknown as RpcProxy;
     const client = buildClientStub({ rpc });
     const recipient = new RecipientClient(client);
 
-    const tabId = await recipient.createTab(USER, RECIPIENT, ASSET, 60);
-    expect(tabId).toBe(16n);
+    const result = await recipient.createTab(USER, RECIPIENT, ASSET, 60);
+    expect(result.tabId).toBe(16n);
+    expect(result.assetAddress).toBe(ASSET);
+    expect(result.nextReqId).toBe(1n);
+  });
+
+  it('builds payment payload with V2 claims', () => {
+    const base = PaymentGuaranteeRequestClaims.new(USER, RECIPIENT, 3, 9, 5000, ASSET, 4);
+    const subjectHash = computeValidationSubjectHash(base);
+    const partial = new PaymentGuaranteeRequestClaimsV2({
+      userAddress: base.userAddress,
+      recipientAddress: base.recipientAddress,
+      tabId: base.tabId,
+      reqId: base.reqId,
+      amount: base.amount,
+      timestamp: base.timestamp,
+      assetAddress: base.assetAddress,
+      validationRegistryAddress: '0x0000000000000000000000000000000000000011',
+      validationRequestHash: '0x' + '00'.repeat(32),
+      validationChainId: 1,
+      validatorAddress: '0x0000000000000000000000000000000000000022',
+      validatorAgentId: 7n,
+      minValidationScore: 80,
+      validationSubjectHash: subjectHash,
+      requiredValidationTag: 'test',
+    });
+    const v2claims = new PaymentGuaranteeRequestClaimsV2({
+      ...partial,
+      validationRequestHash: computeValidationRequestHash(partial),
+    });
+    const payload = buildPaymentPayload(v2claims, {
+      signature: '0xdeadbeef',
+      scheme: SigningScheme.EIP712,
+    });
+    expect(payload.claims.version).toBe('v2');
+    expect((payload.claims as Record<string, unknown>).validation_registry_address).toBe(
+      '0x0000000000000000000000000000000000000011'
+    );
+    expect((payload.claims as Record<string, unknown>).min_validation_score).toBe(80);
+    expect((payload.claims as Record<string, unknown>).required_validation_tag).toBe('test');
+    expect(payload.signature).toBe('0xdeadbeef');
+  });
+
+  it('buildPaymentPayload throws when string signature and no scheme', () => {
+    const claims = PaymentGuaranteeRequestClaims.new(USER, RECIPIENT, 1, 2, 100, ASSET, 0);
+    expect(() => buildPaymentPayload(claims, '0xdeadbeef' as unknown as never)).toThrow();
+  });
+
+  it('verifyPaymentGuarantee V2 rejects when version disabled on-chain', async () => {
+    const gateway = {
+      getGuaranteeVersionConfig: vi.fn().mockResolvedValue({
+        domainSeparator: '0x' + '00'.repeat(32),
+        decoder: '0x0000000000000000000000000000000000000000',
+        enabled: false,
+      }),
+    } as unknown as ContractGateway;
+    const client = buildClientStub({ gateway });
+    const recipient = new RecipientClient(client);
+
+    const v2claims = encodeGuaranteeClaims({
+      domain: new Uint8Array(32),
+      userAddress: USER,
+      recipientAddress: RECIPIENT,
+      tabId: 1n,
+      reqId: 1n,
+      amount: 1n,
+      totalAmount: 1n,
+      assetAddress: ASSET,
+      timestamp: 123,
+      version: 2,
+      validationPolicy: {
+        validationRegistryAddress: '0x0000000000000000000000000000000000000011',
+        validationRequestHash: '0x' + '00'.repeat(32),
+        validationChainId: 1,
+        validatorAddress: '0x0000000000000000000000000000000000000022',
+        validatorAgentId: 1n,
+        minValidationScore: 80,
+        validationSubjectHash: '0x' + '00'.repeat(32),
+        requiredValidationTag: '',
+      },
+    });
+    await expect(
+      recipient.verifyPaymentGuarantee({ claims: v2claims, signature: '0x' + '11'.repeat(96) })
+    ).rejects.toThrow(VerificationError);
+  });
+
+  it('remunerate rejects when claims is a Uint8Array (not a string)', async () => {
+    // verifyPaymentGuarantee decodes the claims first; if that passes (Uint8Array is valid input),
+    // the subsequent typeof check at line 110 catches and throws VerificationError
+    const validClaims = encodeGuaranteeClaims({
+      domain: new Uint8Array(32),
+      userAddress: USER,
+      recipientAddress: RECIPIENT,
+      tabId: 1n,
+      reqId: 1n,
+      amount: 1n,
+      totalAmount: 1n,
+      assetAddress: ASSET,
+      timestamp: 123,
+      version: 1,
+    });
+    // Convert the hex string to a Uint8Array to exercise the non-string claims branch
+    const claimsBytes = Uint8Array.from(Buffer.from(validClaims.replace(/^0x/, ''), 'hex'));
+    const gateway = { remunerate: vi.fn() } as unknown as ContractGateway;
+    const client = buildClientStub({ gateway });
+    const recipient = new RecipientClient(client);
+    await expect(
+      recipient.remunerate({
+        claims: claimsBytes as unknown as string,
+        signature: '0x' + '11'.repeat(96),
+      })
+    ).rejects.toThrow(VerificationError);
+  });
+
+  it('createTab returns 0n tabId and zero assetAddress when response has no fields', async () => {
+    const rpc = {
+      createPaymentTab: vi.fn().mockResolvedValue({}),
+    } as unknown as RpcProxy;
+    const client = buildClientStub({ rpc });
+    const recipient = new RecipientClient(client);
+
+    const result = await recipient.createTab(USER, RECIPIENT, ASSET, 60);
+    expect(result.tabId).toBe(0n);
+    expect(result.assetAddress).toBe('0x0000000000000000000000000000000000000000');
+    expect(result.nextReqId).toBe(0n);
   });
 
   it('rejects invalid remuneration signature types', async () => {

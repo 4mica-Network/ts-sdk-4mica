@@ -6,6 +6,7 @@ export default defineConfig({
     exclude: [
       'dist/**',
       'node_modules/**',
+      'tests/**/*.e2e.test.ts',
       ...(process.env.CI ? ['tests/**/*.integration.test.ts'] : []),
     ],
   },

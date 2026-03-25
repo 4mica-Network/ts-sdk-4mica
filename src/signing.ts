@@ -1,39 +1,15 @@
-import { Account, toBytes, encodeAbiParameters, type Hex } from 'viem';
+import { Account, encodeAbiParameters, type Hex } from 'viem';
+export { computeValidationSubjectHash, computeValidationRequestHash } from './validation';
 import { SigningError } from './errors';
-import { PaymentGuaranteeRequestClaims, PaymentSignature, SigningScheme } from './models';
-import { ValidationError, normalizeAddress } from './utils';
+import {
+  CorePublicParameters,
+  PaymentGuaranteeRequestClaims,
+  PaymentGuaranteeRequestClaimsV2,
+  PaymentSignature,
+  SigningScheme,
+} from './models';
+import { ValidationError, normalizeAddress, ensureHexPrefix } from './utils';
 import { isRecord } from './serde';
-
-export class CorePublicParameters {
-  constructor(
-    public publicKey: Uint8Array,
-    public contractAddress: string,
-    public ethereumHttpRpcUrl: string,
-    public eip712Name: string,
-    public eip712Version: string,
-    public chainId: number
-  ) {}
-
-  static fromRpc(payload: Record<string, unknown>): CorePublicParameters {
-    const pkRaw = payload.public_key ?? payload.publicKey;
-    const pk =
-      typeof pkRaw === 'string'
-        ? toBytes(pkRaw)
-        : pkRaw instanceof Uint8Array
-          ? pkRaw
-          : Array.isArray(pkRaw)
-            ? Uint8Array.from(pkRaw as ArrayLike<number>)
-            : new Uint8Array();
-    return new CorePublicParameters(
-      pk,
-      String(payload.contract_address ?? payload.contractAddress ?? ''),
-      String(payload.ethereum_http_rpc_url ?? payload.ethereumHttpRpcUrl ?? ''),
-      (payload.eip712_name ?? payload.eip712Name ?? '4Mica') as string,
-      (payload.eip712_version ?? payload.eip712Version ?? '1') as string,
-      Number(payload.chain_id ?? payload.chainId)
-    );
-  }
-}
 
 export const GUARANTEE_EIP712_TYPES = {
   EIP712Domain: [
@@ -49,6 +25,31 @@ export const GUARANTEE_EIP712_TYPES = {
     { name: 'amount', type: 'uint256' },
     { name: 'asset', type: 'address' },
     { name: 'timestamp', type: 'uint64' },
+  ],
+} as const;
+
+export const GUARANTEE_EIP712_TYPES_V2 = {
+  EIP712Domain: [
+    { name: 'name', type: 'string' },
+    { name: 'version', type: 'string' },
+    { name: 'chainId', type: 'uint256' },
+  ],
+  SolGuaranteeRequestClaimsV2: [
+    { name: 'user', type: 'address' },
+    { name: 'recipient', type: 'address' },
+    { name: 'tabId', type: 'uint256' },
+    { name: 'reqId', type: 'uint256' },
+    { name: 'amount', type: 'uint256' },
+    { name: 'asset', type: 'address' },
+    { name: 'timestamp', type: 'uint64' },
+    { name: 'validationRegistryAddress', type: 'address' },
+    { name: 'validationRequestHash', type: 'bytes32' },
+    { name: 'validationChainId', type: 'uint256' },
+    { name: 'validatorAddress', type: 'address' },
+    { name: 'validatorAgentId', type: 'uint256' },
+    { name: 'minValidationScore', type: 'uint8' },
+    { name: 'validationSubjectHash', type: 'bytes32' },
+    { name: 'requiredValidationTag', type: 'string' },
   ],
 } as const;
 
@@ -68,6 +69,33 @@ export type GuaranteeTypedData = {
     amount: bigint;
     asset: Hex;
     timestamp: bigint;
+  };
+};
+
+export type GuaranteeTypedDataV2 = {
+  types: typeof GUARANTEE_EIP712_TYPES_V2;
+  primaryType: 'SolGuaranteeRequestClaimsV2';
+  domain: {
+    name: string;
+    version: string;
+    chainId: number;
+  };
+  message: {
+    user: Hex;
+    recipient: Hex;
+    tabId: bigint;
+    reqId: bigint;
+    amount: bigint;
+    asset: Hex;
+    timestamp: bigint;
+    validationRegistryAddress: Hex;
+    validationRequestHash: Hex;
+    validationChainId: bigint;
+    validatorAddress: Hex;
+    validatorAgentId: bigint;
+    minValidationScore: number;
+    validationSubjectHash: Hex;
+    requiredValidationTag: string;
   };
 };
 
@@ -230,6 +258,81 @@ export function buildGuaranteeTypedData(
   } as const;
 }
 
+export function buildGuaranteeTypedDataV2(
+  params: CorePublicParameters,
+  claims: PaymentGuaranteeRequestClaimsV2
+): GuaranteeTypedDataV2 {
+  return {
+    types: GUARANTEE_EIP712_TYPES_V2,
+    primaryType: 'SolGuaranteeRequestClaimsV2',
+    domain: {
+      name: params.eip712Name,
+      version: params.eip712Version,
+      chainId: params.chainId,
+    },
+    message: {
+      user: claims.userAddress as Hex,
+      recipient: claims.recipientAddress as Hex,
+      tabId: claims.tabId,
+      reqId: claims.reqId,
+      amount: claims.amount,
+      asset: claims.assetAddress as Hex,
+      timestamp: BigInt(claims.timestamp),
+      validationRegistryAddress: claims.validationRegistryAddress as Hex,
+      validationRequestHash: ensureHexPrefix(claims.validationRequestHash),
+      validationChainId: BigInt(claims.validationChainId),
+      validatorAddress: claims.validatorAddress as Hex,
+      validatorAgentId: claims.validatorAgentId,
+      minValidationScore: claims.minValidationScore,
+      validationSubjectHash: ensureHexPrefix(claims.validationSubjectHash),
+      requiredValidationTag: claims.requiredValidationTag,
+    },
+  } as const;
+}
+
+export function encodeGuaranteeEip191V2(claims: PaymentGuaranteeRequestClaimsV2): string {
+  return encodeAbiParameters(
+    [
+      { type: 'address' },
+      { type: 'address' },
+      { type: 'uint256' },
+      { type: 'uint256' },
+      { type: 'uint256' },
+      { type: 'address' },
+      { type: 'uint64' },
+      { type: 'address' },
+      { type: 'bytes32' },
+      { type: 'uint256' },
+      { type: 'address' },
+      { type: 'uint256' },
+      { type: 'uint8' },
+      { type: 'bytes32' },
+      { type: 'string' },
+    ],
+    [
+      claims.userAddress as Hex,
+      claims.recipientAddress as Hex,
+      claims.tabId,
+      claims.reqId,
+      claims.amount,
+      claims.assetAddress as Hex,
+      BigInt(claims.timestamp),
+      claims.validationRegistryAddress as Hex,
+      (claims.validationRequestHash.startsWith('0x')
+        ? claims.validationRequestHash
+        : `0x${claims.validationRequestHash}`) as Hex,
+      BigInt(claims.validationChainId),
+      claims.validatorAddress as Hex,
+      claims.validatorAgentId,
+      claims.minValidationScore,
+      (claims.validationSubjectHash.startsWith('0x')
+        ? claims.validationSubjectHash
+        : `0x${claims.validationSubjectHash}`) as Hex,
+      claims.requiredValidationTag,
+    ]
+  );
+}
+
 export function encodeGuaranteeEip191(claims: PaymentGuaranteeRequestClaims): string {
   const payload = encodeAbiParameters(
     [
@@ -263,16 +366,27 @@ export class PaymentSigner {
 
   async signRequest(
     params: CorePublicParameters,
-    claims: PaymentGuaranteeRequestClaims,
+    claims: PaymentGuaranteeRequestClaims | PaymentGuaranteeRequestClaimsV2,
     scheme: SigningScheme = SigningScheme.EIP712
   ): Promise<PaymentSignature> {
     try {
       validateGuaranteeSigningContext(params, claims, { signerAddress: this.signer.address });
+      const isV2 = claims instanceof PaymentGuaranteeRequestClaimsV2;
+
       if (scheme === SigningScheme.EIP712) {
         if (!this.signer.signTypedData) {
           throw new SigningError('signTypedData is not supported for this account');
         }
-
+        if (isV2) {
+          const typed = buildGuaranteeTypedDataV2(params, claims);
+          const signature = await this.signer.signTypedData({
+            domain: typed.domain,
+            types: { SolGuaranteeRequestClaimsV2: typed.types.SolGuaranteeRequestClaimsV2 },
+            primaryType: typed.primaryType,
+            message: typed.message,
+          });
+          return { signature, scheme };
+        }
         const typed = buildGuaranteeTypedData(params, claims);
         const signature = await this.signer.signTypedData({
           domain: typed.domain,
@@ -282,15 +396,16 @@ export class PaymentSigner {
         });
         return { signature, scheme };
       }
+
       if (scheme === SigningScheme.EIP191) {
         if (!this.signer.signMessage) {
           throw new SigningError('signMessage is not supported for this account');
         }
-
-        const message = encodeGuaranteeEip191(claims);
+        const message = isV2 ? encodeGuaranteeEip191V2(claims) : encodeGuaranteeEip191(claims);
         const signature = await this.signer.signMessage({ message });
         return { signature, scheme };
       }
+
       throw new SigningError(`unsupported signing scheme: ${scheme}`);
     } catch (err: unknown) {
       if (err instanceof ValidationError) {

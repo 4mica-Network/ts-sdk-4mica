@@ -8,6 +8,7 @@ coverage/
 
 # Environment
 .env
+.env.e2e
 .env.local
 .env.*.local
 
@@ -23,6 +24,7 @@ pnpm-debug.log*
 .vscode/
 .idea/
 .fleet/
+.claude/
 
 # Tooling caches
 .eslintcache
@@ -34,3 +36,6 @@ pnpm-debug.log*
 
 # Local
 tmp/
+
+# Generated example artifacts
+examples/examples/

@@ -7,7 +7,13 @@ type GatewayMocks = {
   gateway: ContractGateway;
   publicClient: { waitForTransactionReceipt: ReturnType<typeof vi.fn> };
   walletClient: { sendTransaction: ReturnType<typeof vi.fn>; account: { address: string } };
-  contract: { write: { payTabInERC20Token: ReturnType<typeof vi.fn> } };
+  contract: {
+    address: string;
+    write: {
+      payTabInERC20Token: ReturnType<typeof vi.fn>;
+      remunerate: ReturnType<typeof vi.fn>;
+    };
+  };
 };
 
 function createGateway(opts?: {
@@ -22,8 +28,10 @@ function createGateway(opts?: {
     account: { address: DUMMY_ADDRESS },
   };
   const contract = {
+    address: DUMMY_ADDRESS,
     write: {
       payTabInERC20Token: vi.fn(opts?.writeImpl ?? (async () => '0xhash')),
+      remunerate: vi.fn(opts?.writeImpl ?? (async () => '0xhash')),
     },
   };
 
@@ -32,7 +40,13 @@ function createGateway(opts?: {
       waitForTransactionReceipt: (args: { hash: string }) => Promise<{ hash: string }>;
     },
     walletClient: { sendTransaction: () => Promise<string>; account: { address: string } },
-    contract: { write: { payTabInERC20Token: () => Promise<string> } }
+    contract: {
+      address: string;
+      write: {
+        payTabInERC20Token: () => Promise<string>;
+        remunerate: () => Promise<string>;
+      };
+    }
   ) => ContractGateway;
   const gateway = new GatewayCtor(publicClient, walletClient, contract);
   return { gateway, publicClient, walletClient, contract };
@@ -100,5 +114,17 @@ describe('ContractGateway transaction queue', () => {
     expect(contract.write.payTabInERC20Token).toHaveBeenCalledTimes(2);
     expect(results[0].status).toBe('rejected');
     expect(results[1].status).toBe('fulfilled');
+  });
+
+  it('submits remunerate with an explicit gas limit', async () => {
+    const { gateway, contract } = createGateway();
+
+    await gateway.remunerate(
+      new Uint8Array([1, 2, 3]),
+      Array.from({ length: 8 }, () => new Uint8Array(32))
+    );
+
+    expect(contract.write.remunerate).toHaveBeenCalledTimes(1);
+    expect(contract.write.remunerate.mock.calls[0]?.[1]).toEqual({ gas: 8_000_000n });
   });
 });

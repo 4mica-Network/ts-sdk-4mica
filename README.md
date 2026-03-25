@@ -279,9 +279,9 @@ Notes:
 
 - `createTab(userAddress, recipientAddress, erc20Token?, ttl?)`
 - `getTabPaymentStatus(tabId)`
-- `issuePaymentGuarantee(claims, signature, scheme)`
+- `issuePaymentGuarantee(claims, signature, scheme)` — accepts V1 or V2 claims
 - `verifyPaymentGuarantee(cert)`
-- `remunerate(cert)`
+- `remunerate(cert)` — requires `@noble/curves` peer dependency
 - `listSettledTabs()`
 - `listPendingRemunerations()`
 - `getTab(tabId)`
@@ -302,10 +302,71 @@ Available under `client.rpc` (requires an admin API key):
 - `listAdminApiKeys()`
 - `revokeAdminApiKey(keyId)`
 
+### V2 Payment Guarantees (on-chain validation policy)
+
+V2 guarantees attach an on-chain validation policy that lets a validator agent attest to the
+quality/validity of a payment before it is remunerated. Use `PaymentGuaranteeRequestClaimsV2`
+and the canonical hash helpers:
+
+```ts
+import {
+  PaymentGuaranteeRequestClaimsV2,
+  computeValidationSubjectHash,
+  computeValidationRequestHash,
+  SigningScheme,
+} from "@4mica/sdk";
+
+// 1) Build base V1 claims first
+const baseClaims = PaymentGuaranteeRequestClaims.new(
+  userAddress, recipientAddress, tabId, amount, timestamp, erc20Token, reqId
+);
+
+// 2) Compute canonical hashes
+const validationSubjectHash = computeValidationSubjectHash(baseClaims);
+
+const partialV2 = new PaymentGuaranteeRequestClaimsV2({
+  ...baseClaims,
+  validationRegistryAddress: "0x...",
+  validationRequestHash: "0x" + "00".repeat(32), // placeholder
+  validationChainId: 1,
+  validatorAddress: "0x...",
+  validatorAgentId: 1n,
+  minValidationScore: 80,  // 1–100
+  validationSubjectHash,
+  requiredValidationTag: "my-tag",
+});
+
+const validationRequestHash = computeValidationRequestHash(partialV2);
+const claimsV2 = new PaymentGuaranteeRequestClaimsV2({ ...partialV2, validationRequestHash });
+
+// 3) Sign and issue
+const { signature, scheme } = await client.user.signPayment(claimsV2, SigningScheme.EIP712);
+const cert = await client.recipient.issuePaymentGuarantee(claimsV2, signature, scheme);
+```
+
 ## Error Handling
 
-All SDK errors extend `FourMicaError`. Common error types include `ConfigError`, `RpcError`,
-`SigningError`, `VerificationError`, `X402Error`, and `AuthError`.
+All SDK errors extend `FourMicaError`. Import individual error classes to distinguish them:
+
+```ts
+import {
+  ConfigError,       // invalid ConfigBuilder input
+  RpcError,          // 4Mica core service error (has .status and .body)
+  SigningError,       // signing scheme unsupported or address mismatch
+  ContractError,      // on-chain call failed or unexpected result
+  VerificationError,  // BLS certificate decode/domain mismatch
+  X402Error,          // x402 flow error (bad scheme, tab resolution, settlement)
+  AuthError,          // base class for all auth errors
+  AuthMissingConfigError, // auth not configured when login() is called
+} from "@4mica/sdk";
+
+try {
+  await client.recipient.remunerate(cert);
+} catch (err) {
+  if (err instanceof VerificationError) { /* bad cert */ }
+  if (err instanceof ContractError) { /* on-chain failure */ }
+}
+```
 
 ## License
 

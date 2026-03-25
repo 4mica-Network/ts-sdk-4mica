@@ -1,5 +1,5 @@
 import { PaymentSignature } from '../models';
-import type { PaymentPayload, PaymentPayloadClaims } from '../payment';
+import type { PaymentPayload } from '../payment';
 
 export interface PaymentRequirementsV1 {
   scheme: string;
@@ -29,6 +29,13 @@ export type PaymentRequirements = PaymentRequirementsV2;
 
 export interface PaymentRequirementsExtra {
   tabEndpoint?: string;
+  // V2 validation policy fields (flat, matching Rust SDK extra map)
+  validationRegistryAddress?: string;
+  validationChainId?: number;
+  validatorAddress?: string;
+  validatorAgentId?: string;
+  minValidationScore?: number;
+  requiredValidationTag?: string;
 }
 
 export interface TabResponse {
@@ -37,7 +44,7 @@ export interface TabResponse {
   nextReqId?: string;
 }
 
-export type X402PaymentPayloadClaims = PaymentPayloadClaims;
+export type X402PaymentPayloadClaims = PaymentPayload['claims'];
 
 export type X402PaymentPayload = PaymentPayload;
 
