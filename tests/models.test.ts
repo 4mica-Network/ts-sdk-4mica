@@ -1,3 +1,4 @@
+import { getAddress } from 'viem';
 import { describe, expect, it } from 'vitest';
 import {
   AdminApiKeyInfo,
@@ -210,6 +211,24 @@ describe('PaymentGuaranteeRequestClaimsV2 boundaries', () => {
     expect(
       () => new PaymentGuaranteeRequestClaimsV2({ ...V2_BASE, minValidationScore: 100 })
     ).not.toThrow();
+  });
+
+  it('normalizes V2 validation fields', () => {
+    const claims = new PaymentGuaranteeRequestClaimsV2({
+      ...V2_BASE,
+      minValidationScore: 80,
+      validationRegistryAddress: '0x00000000000000000000000000000000000000AA',
+      validationRequestHash: 'AB'.repeat(32),
+      validatorAddress: '0x00000000000000000000000000000000000000BB',
+      validationSubjectHash: 'CD'.repeat(32),
+    });
+
+    expect(claims.validationRegistryAddress).toBe(
+      getAddress('0x00000000000000000000000000000000000000AA')
+    );
+    expect(claims.validatorAddress).toBe(getAddress('0x00000000000000000000000000000000000000BB'));
+    expect(claims.validationRequestHash).toBe(`0x${'ab'.repeat(32)}`);
+    expect(claims.validationSubjectHash).toBe(`0x${'cd'.repeat(32)}`);
   });
 });
 

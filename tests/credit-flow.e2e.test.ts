@@ -1,28 +1,56 @@
+import { stdin as input, stdout as output } from 'node:process';
+import { createInterface } from 'node:readline/promises';
 import { afterAll, describe, expect, it } from 'vitest';
 import { formatEther, formatUnits, getContract, parseEther, parseUnits } from 'viem';
 import { erc20Abi } from '../src/abi/erc20';
 import { Client } from '../src/client';
 import { ConfigBuilder } from '../src/config';
 import { RpcError } from '../src/errors';
+import type { BLSCert } from '../src/models';
 import {
   PaymentGuaranteeRequestClaims,
   PaymentGuaranteeRequestClaimsV2,
   SigningScheme,
 } from '../src/models';
 import { computeValidationRequestHash, computeValidationSubjectHash } from '../src/validation';
+import {
+  PaymentRequirementsV1,
+  PaymentRequirementsV2,
+  TabResponse,
+  X402Flow,
+  X402PaymentEnvelopeV1,
+  X402PaymentEnvelopeV2,
+  X402PaymentRequired,
+} from '../src/x402';
 
 const DEFAULT_RPC_URL = 'http://127.0.0.1:3000/';
 const DEFAULT_PAYER_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const DEFAULT_RECIPIENT_KEY = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
+const DEFAULT_FACILITATOR_URL = 'http://127.0.0.1:8080';
 
 const e2eEnabled = process.env['4MICA_E2E'] === '1';
 const describeE2E = e2eEnabled ? describe : describe.skip;
+type E2EMode = 'direct' | 'facilitator';
+type X402Envelope = X402PaymentEnvelopeV1 | X402PaymentEnvelopeV2;
+
+interface FacilitatorTabResponse {
+  tabId: string;
+  userAddress?: string;
+  recipientAddress?: string;
+  assetAddress?: string;
+  ttlSeconds?: number;
+  nextReqId?: string;
+}
+
+let cachedE2EMode: E2EMode | undefined;
 
 const resolveRpcUrl = (): string => process.env['4MICA_RPC_URL'] ?? DEFAULT_RPC_URL;
 const resolvePayerKey = (): string =>
   process.env['PAYER_PRIVATE_KEY'] ?? process.env['4MICA_WALLET_PRIVATE_KEY'] ?? DEFAULT_PAYER_KEY;
 const resolveRecipientKey = (): string =>
   process.env['RECIPIENT_PRIVATE_KEY'] ?? DEFAULT_RECIPIENT_KEY;
+const resolveFacilitatorUrl = (): string =>
+  (process.env['FACILITATOR_URL'] ?? DEFAULT_FACILITATOR_URL).replace(/\/$/, '');
 const resolveTokenAddressOverride = (): `0x${string}` | undefined => {
   const value = process.env['E2E_TOKEN_ADDRESS'];
   return value ? (value as `0x${string}`) : undefined;
@@ -38,6 +66,12 @@ const describeEthAmount = (amount: bigint): string =>
   `${formatEther(amount)} (${amount.toString()})`;
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 const toHex = (value: bigint): string => `0x${value.toString(16)}`;
+const parseU256Like = (value: string | bigint | number | null | undefined, field: string): bigint => {
+  if (typeof value === 'bigint') return value;
+  if (typeof value === 'number') return BigInt(value);
+  if (typeof value === 'string' && value.trim()) return BigInt(value);
+  throw new Error(`invalid ${field}: ${String(value)}`);
+};
 const previewHex = (value: string, bytes = 16): string => {
   if (!value.startsWith('0x')) return value;
   const visible = 2 + bytes * 2;
@@ -50,6 +84,182 @@ const logStep = (title: string, details: Record<string, string | number | boolea
   }
 };
 const minBigInt = (a: bigint, b: bigint): bigint => (a < b ? a : b);
+
+const resolveE2EMode = async (): Promise<E2EMode> => {
+  if (cachedE2EMode) return cachedE2EMode;
+
+  const configured = process.env['4MICA_E2E_MODE']?.trim().toLowerCase() ?? '';
+  if (configured === 'direct' || configured === 'facilitator') {
+    cachedE2EMode = configured;
+    console.log(`[e2e] using configured mode: ${cachedE2EMode}`);
+    return cachedE2EMode;
+  }
+
+  if (configured && configured !== 'prompt') {
+    throw new Error('4MICA_E2E_MODE must be one of: direct, facilitator, prompt');
+  }
+
+  if (input.isTTY && output.isTTY) {
+    const rl = createInterface({ input, output });
+    try {
+      const answer = await rl.question(
+        '\nSelect E2E mode: [d]irect core API or [f]acilitator via x402-4mica? '
+      );
+      cachedE2EMode = answer.trim().toLowerCase().startsWith('f') ? 'facilitator' : 'direct';
+    } finally {
+      rl.close();
+    }
+  } else {
+    cachedE2EMode = 'direct';
+  }
+
+  console.log(`[e2e] selected mode: ${cachedE2EMode}`);
+  return cachedE2EMode;
+};
+
+const decodePaymentHeader = (header: string): X402Envelope => {
+  const decoded = Buffer.from(header, 'base64').toString('utf8');
+  return JSON.parse(decoded) as X402Envelope;
+};
+
+const claimsFromEnvelope = (
+  envelope: X402Envelope
+): PaymentGuaranteeRequestClaims | PaymentGuaranteeRequestClaimsV2 => {
+  const claims = envelope.payload.claims;
+  if (claims.version === 'v2') {
+    return new PaymentGuaranteeRequestClaimsV2({
+      userAddress: claims.user_address,
+      recipientAddress: claims.recipient_address,
+      tabId: parseU256Like(claims.tab_id, 'tab_id'),
+      reqId: parseU256Like(claims.req_id, 'req_id'),
+      amount: parseU256Like(claims.amount, 'amount'),
+      timestamp: claims.timestamp,
+      assetAddress: claims.asset_address,
+      validationRegistryAddress: claims.validation_registry_address,
+      validationRequestHash: claims.validation_request_hash,
+      validationChainId: claims.validation_chain_id,
+      validatorAddress: claims.validator_address,
+      validatorAgentId: parseU256Like(claims.validator_agent_id, 'validator_agent_id'),
+      minValidationScore: claims.min_validation_score,
+      validationSubjectHash: claims.validation_subject_hash,
+      requiredValidationTag: claims.required_validation_tag ?? '',
+    });
+  }
+
+  return PaymentGuaranteeRequestClaims.new(
+    claims.user_address,
+    claims.recipient_address,
+    parseU256Like(claims.tab_id, 'tab_id'),
+    parseU256Like(claims.amount, 'amount'),
+    claims.timestamp,
+    claims.asset_address,
+    parseU256Like(claims.req_id, 'req_id')
+  );
+};
+
+const postFacilitatorJson = async <T>(
+  path: string,
+  body: Record<string, unknown>
+): Promise<T> => {
+  const response = await fetch(`${resolveFacilitatorUrl()}${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body, (_, value) =>
+      typeof value === 'bigint' ? `0x${value.toString(16)}` : value
+    ),
+  });
+  const text = await response.text();
+  const payload = text ? (JSON.parse(text) as T) : ({} as T);
+  if (!response.ok) {
+    throw new Error(`facilitator ${path} returned ${response.status}: ${text}`);
+  }
+  return payload;
+};
+
+class FacilitatorX402Flow extends X402Flow {
+  lastTab?: TabResponse & { assetAddress: string; ttlSeconds?: number };
+
+  protected override async requestTab(
+    x402Version: number,
+    paymentRequirements: PaymentRequirementsV1 | PaymentRequirementsV2,
+    userAddress: string
+  ): Promise<TabResponse> {
+    const tab = await postFacilitatorJson<FacilitatorTabResponse>('/tabs', {
+      x402Version,
+      userAddress,
+      recipientAddress: paymentRequirements.payTo,
+      network: paymentRequirements.network,
+      erc20Token: paymentRequirements.asset,
+      ttlSeconds: paymentRequirements.maxTimeoutSeconds,
+    });
+
+    this.lastTab = {
+      tabId: tab.tabId,
+      userAddress: tab.userAddress ?? userAddress,
+      nextReqId: tab.nextReqId ?? '0x0',
+      assetAddress: tab.assetAddress ?? paymentRequirements.asset,
+      ttlSeconds: tab.ttlSeconds,
+    };
+    return this.lastTab;
+  }
+}
+
+const issueGuaranteeViaFacilitator = async (
+  x402Version: 1 | 2,
+  paymentHeader: string,
+  envelope: X402Envelope,
+  paymentRequirements: PaymentRequirementsV1 | PaymentRequirementsV2
+): Promise<BLSCert | null> => {
+  const verifyPayload = await postFacilitatorJson<{ isValid?: boolean; error?: string }>(
+    '/verify',
+    {
+      x402Version,
+      paymentHeader,
+      paymentPayload: envelope,
+      paymentRequirements,
+    }
+  );
+  if (verifyPayload.isValid !== true) {
+    throw new Error(`facilitator verify failed: ${verifyPayload.error ?? 'invalid payment'}`);
+  }
+
+  const settlePayload = await postFacilitatorJson<{
+    success?: boolean;
+    error?: string;
+    errorReason?: string;
+    error_reason?: string;
+    message?: string;
+    certificate?: { claims?: string; signature?: string };
+  }>('/settle', {
+    x402Version,
+    paymentHeader,
+    paymentPayload: envelope,
+    paymentRequirements,
+  });
+  const success = settlePayload.success ?? !settlePayload.error;
+  if (!success) {
+    const reason =
+      settlePayload.errorReason ??
+      settlePayload.error_reason ??
+      settlePayload.error ??
+      settlePayload.message ??
+      'unknown error';
+    if (x402Version === 1 && reason.includes('guarantee domain mismatch')) {
+      logStep('Facilitator V1 flow unavailable', { reason });
+      return null;
+    }
+    throw new Error(`facilitator settle failed: ${reason}`);
+  }
+
+  const certificate = settlePayload.certificate;
+  if (!certificate?.claims || !certificate.signature) {
+    throw new Error(`facilitator certificate is malformed: ${JSON.stringify(settlePayload)}`);
+  }
+  return {
+    claims: certificate.claims,
+    signature: certificate.signature,
+  };
+};
 
 describeE2E('credit flow e2e', () => {
   let payerClient: Client | undefined;
@@ -357,6 +567,7 @@ describeE2E('credit flow e2e', () => {
 
   it('tracks lock, unlock, remuneration, and withdrawal against the user deposit', async () => {
     const rpcUrl = resolveRpcUrl();
+    const mode = await resolveE2EMode();
     const payerCfg = new ConfigBuilder()
       .rpcUrl(rpcUrl)
       .walletPrivateKey(resolvePayerKey())
@@ -385,6 +596,9 @@ describeE2E('credit flow e2e', () => {
     tokenDecimals = token.decimals;
     const depositAmount = parseUnits(process.env['DEPOSIT_AMOUNT'] ?? '1.0', tokenDecimals);
     const guaranteeAmount = parseUnits(process.env['GUARANTEE_AMOUNT'] ?? '0.001', tokenDecimals);
+    const network = `eip155:${payerClient.params.chainId}`;
+    const facilitatorFlow =
+      mode === 'facilitator' ? new FacilitatorX402Flow(payerClient.user) : undefined;
     payerAddress = payerCfg.signer.address;
     recipientAddress = recipientCfg.signer.address;
 
@@ -394,6 +608,8 @@ describeE2E('credit flow e2e', () => {
       rpcUrl,
       payerAddress,
       recipientAddress,
+      mode,
+      facilitatorUrl: mode === 'facilitator' ? resolveFacilitatorUrl() : 'n/a',
       tokenAddress,
       tokenDecimals,
       depositAmount: describeAmount(depositAmount, tokenDecimals),
@@ -454,12 +670,70 @@ describeE2E('credit flow e2e', () => {
     const tabExpirationTime = Number(await payerClient.gateway.contract.read.tabExpirationTime());
     tabTtlSeconds = await resolveEffectiveTabTtlSeconds();
 
-    const paidTab = await recipientClient.recipient.createTab(
-      payerAddress,
-      recipientAddress,
-      tokenAddress,
-      tabTtlSeconds || null
-    );
+    let paidTab:
+      | {
+          tabId: bigint;
+          nextReqId: bigint;
+          assetAddress: string;
+        }
+      | undefined;
+    let paidClaims: PaymentGuaranteeRequestClaims;
+    let paidSignature: string;
+    let paidScheme: SigningScheme;
+    let paidHeader: string | undefined;
+    let paidEnvelope: X402Envelope | undefined;
+    if (mode === 'facilitator') {
+      const paidRequirements: PaymentRequirementsV1 = {
+        scheme: '4mica-credit',
+        network,
+        maxAmountRequired: guaranteeAmount.toString(),
+        payTo: recipientAddress,
+        asset: tokenAddress,
+        maxTimeoutSeconds: tabTtlSeconds,
+      };
+      const signed = await facilitatorFlow!.signPayment(paidRequirements, payerAddress);
+      paidHeader = signed.header;
+      paidEnvelope = decodePaymentHeader(signed.header);
+      const claims = claimsFromEnvelope(paidEnvelope);
+      if (claims instanceof PaymentGuaranteeRequestClaimsV2) {
+        throw new Error('expected V1 claims from facilitator signPayment');
+      }
+      paidClaims = claims;
+      paidSignature = signed.signature.signature;
+      paidScheme = signed.signature.scheme;
+      if (!facilitatorFlow?.lastTab) {
+        throw new Error('facilitator did not return a tab');
+      }
+      paidTab = {
+        tabId: paidClaims.tabId,
+        nextReqId: paidClaims.reqId,
+        assetAddress: facilitatorFlow.lastTab.assetAddress,
+      };
+    } else {
+      const createdTab = await recipientClient.recipient.createTab(
+        payerAddress,
+        recipientAddress,
+        tokenAddress,
+        tabTtlSeconds || null
+      );
+      paidTab = {
+        tabId: createdTab.tabId,
+        nextReqId: createdTab.nextReqId,
+        assetAddress: createdTab.assetAddress,
+      };
+      paidClaims = PaymentGuaranteeRequestClaims.new(
+        payerAddress,
+        recipientAddress,
+        paidTab.tabId,
+        guaranteeAmount,
+        Math.floor(Date.now() / 1000),
+        paidTab.assetAddress,
+        paidTab.nextReqId
+      );
+      const signed = await payerClient.user.signPayment(paidClaims, SigningScheme.EIP712);
+      paidSignature = signed.signature;
+      paidScheme = signed.scheme;
+    }
     expect(paidTab.tabId > 0n).toBe(true);
     expect(paidTab.assetAddress.toLowerCase()).toBe(tokenAddress.toLowerCase());
     logStep('Create pay tab', {
@@ -469,16 +743,6 @@ describeE2E('credit flow e2e', () => {
       ttlSeconds: tabTtlSeconds,
       tabExpirationTime,
     });
-
-    const paidClaims = PaymentGuaranteeRequestClaims.new(
-      payerAddress,
-      recipientAddress,
-      paidTab.tabId,
-      guaranteeAmount,
-      Math.floor(Date.now() / 1000),
-      paidTab.assetAddress,
-      paidTab.nextReqId
-    );
     logStep('Build pay V1 claims', {
       tabId: toHex(paidClaims.tabId),
       reqId: toHex(paidClaims.reqId),
@@ -489,20 +753,25 @@ describeE2E('credit flow e2e', () => {
       recipientAddress: paidClaims.recipientAddress,
     });
 
-    const { signature: paidSignature, scheme: paidScheme } = await payerClient.user.signPayment(
-      paidClaims,
-      SigningScheme.EIP712
-    );
     logStep('Sign pay V1 claims', {
       scheme: paidScheme,
       signature: previewHex(paidSignature),
     });
 
-    const paidCert = await recipientClient.recipient.issuePaymentGuarantee(
-      paidClaims,
-      paidSignature,
-      paidScheme
-    );
+    const paidCert =
+      mode === 'facilitator'
+        ? await issueGuaranteeViaFacilitator(1, paidHeader!, paidEnvelope!, {
+            scheme: '4mica-credit',
+            network,
+            maxAmountRequired: guaranteeAmount.toString(),
+            payTo: recipientAddress,
+            asset: tokenAddress,
+            maxTimeoutSeconds: tabTtlSeconds,
+          })
+        : await recipientClient.recipient.issuePaymentGuarantee(paidClaims, paidSignature, paidScheme);
+    if (!paidCert) {
+      return;
+    }
     logStep('Issue pay V1 guarantee', {
       claims: previewHex(paidCert.claims, 24),
       blsSignature: previewHex(paidCert.signature, 24),
@@ -644,12 +913,70 @@ describeE2E('credit flow e2e', () => {
 
     const remunerationFlowStartBalance = await getCoreAssetBalance();
 
-    const tab = await recipientClient.recipient.createTab(
-      payerAddress,
-      recipientAddress,
-      tokenAddress,
-      tabTtlSeconds || null
-    );
+    let tab:
+      | {
+          tabId: bigint;
+          nextReqId: bigint;
+          assetAddress: string;
+        }
+      | undefined;
+    let claims: PaymentGuaranteeRequestClaims;
+    let signature: string;
+    let scheme: SigningScheme;
+    let header: string | undefined;
+    let envelope: X402Envelope | undefined;
+    if (mode === 'facilitator') {
+      const requirements: PaymentRequirementsV1 = {
+        scheme: '4mica-credit',
+        network,
+        maxAmountRequired: guaranteeAmount.toString(),
+        payTo: recipientAddress,
+        asset: tokenAddress,
+        maxTimeoutSeconds: tabTtlSeconds,
+      };
+      const signed = await facilitatorFlow!.signPayment(requirements, payerAddress);
+      header = signed.header;
+      envelope = decodePaymentHeader(signed.header);
+      const builtClaims = claimsFromEnvelope(envelope);
+      if (builtClaims instanceof PaymentGuaranteeRequestClaimsV2) {
+        throw new Error('expected V1 claims from facilitator signPayment');
+      }
+      claims = builtClaims;
+      signature = signed.signature.signature;
+      scheme = signed.signature.scheme;
+      if (!facilitatorFlow?.lastTab) {
+        throw new Error('facilitator did not return a tab');
+      }
+      tab = {
+        tabId: claims.tabId,
+        nextReqId: claims.reqId,
+        assetAddress: facilitatorFlow.lastTab.assetAddress,
+      };
+    } else {
+      const createdTab = await recipientClient.recipient.createTab(
+        payerAddress,
+        recipientAddress,
+        tokenAddress,
+        tabTtlSeconds || null
+      );
+      tab = {
+        tabId: createdTab.tabId,
+        nextReqId: createdTab.nextReqId,
+        assetAddress: createdTab.assetAddress,
+      };
+      claims = PaymentGuaranteeRequestClaims.new(
+        payerAddress,
+        recipientAddress,
+        tab.tabId,
+        guaranteeAmount,
+        Math.floor(Date.now() / 1000),
+        tab.assetAddress,
+        tab.nextReqId
+      );
+      const signed = await payerClient.user.signPayment(claims, SigningScheme.EIP712);
+      signature = signed.signature;
+      scheme = signed.scheme;
+    }
     expect(tab.tabId > 0n).toBe(true);
     expect(tab.assetAddress.toLowerCase()).toBe(tokenAddress.toLowerCase());
     logStep('Create remunerated tab', {
@@ -659,16 +986,6 @@ describeE2E('credit flow e2e', () => {
       ttlSeconds: tabTtlSeconds,
       tabExpirationTime,
     });
-
-    const claims = PaymentGuaranteeRequestClaims.new(
-      payerAddress,
-      recipientAddress,
-      tab.tabId,
-      guaranteeAmount,
-      Math.floor(Date.now() / 1000),
-      tab.assetAddress,
-      tab.nextReqId
-    );
     logStep('Build remunerated V1 claims', {
       tabId: toHex(claims.tabId),
       reqId: toHex(claims.reqId),
@@ -679,13 +996,25 @@ describeE2E('credit flow e2e', () => {
       recipientAddress: claims.recipientAddress,
     });
 
-    const { signature, scheme } = await payerClient.user.signPayment(claims, SigningScheme.EIP712);
     logStep('Sign remunerated V1 claims', {
       scheme,
       signature: previewHex(signature),
     });
 
-    const cert = await recipientClient.recipient.issuePaymentGuarantee(claims, signature, scheme);
+    const cert =
+      mode === 'facilitator'
+        ? await issueGuaranteeViaFacilitator(1, header!, envelope!, {
+            scheme: '4mica-credit',
+            network,
+            maxAmountRequired: guaranteeAmount.toString(),
+            payTo: recipientAddress,
+            asset: tokenAddress,
+            maxTimeoutSeconds: tabTtlSeconds,
+          })
+        : await recipientClient.recipient.issuePaymentGuarantee(claims, signature, scheme);
+    if (!cert) {
+      return;
+    }
     logStep('Issue remunerated V1 guarantee', {
       claims: previewHex(cert.claims, 24),
       blsSignature: previewHex(cert.signature, 24),
@@ -884,6 +1213,7 @@ describeE2E('credit flow e2e', () => {
     if (!payerClient || !recipientClient) {
       throw new Error('V1 e2e setup must run before V2 e2e');
     }
+    const mode = await resolveE2EMode();
     if (!tokenAddress || tokenDecimals === 0) {
       return;
     }
@@ -909,13 +1239,6 @@ describeE2E('credit flow e2e', () => {
       return;
     }
 
-    const tab = await recipientClient.recipient.createTab(
-      payerAddress,
-      recipientAddress,
-      tokenAddress,
-      effectiveTabTtlSeconds
-    );
-
     const guaranteeAmount = parseUnits(
       process.env['V2_GUARANTEE_AMOUNT'] ?? '0.001',
       tokenDecimals
@@ -924,7 +1247,123 @@ describeE2E('credit flow e2e', () => {
     const validatorAgentId = BigInt(process.env['VALIDATOR_AGENT_ID'] ?? '1');
     const minValidationScore = Number(process.env['MIN_VALIDATION_SCORE'] ?? '80');
     const requiredValidationTag = process.env['VALIDATION_TAG'] ?? '';
-    const timestamp = Math.floor(Date.now() / 1000);
+    const network = `eip155:${payerClient.params.chainId}`;
+    const facilitatorFlow =
+      mode === 'facilitator' ? new FacilitatorX402Flow(payerClient.user) : undefined;
+    let tab:
+      | {
+          tabId: bigint;
+          nextReqId: bigint;
+          assetAddress: string;
+        }
+      | undefined;
+    let claims: PaymentGuaranteeRequestClaimsV2;
+    let signature: string;
+    let scheme: SigningScheme;
+    let header: string | undefined;
+    let envelope: X402Envelope | undefined;
+    let timestamp = Math.floor(Date.now() / 1000);
+    if (mode === 'facilitator') {
+      const requirements: PaymentRequirementsV2 = {
+        scheme: '4mica-credit',
+        network,
+        asset: tokenAddress,
+        amount: guaranteeAmount.toString(),
+        payTo: recipientAddress,
+        maxTimeoutSeconds: effectiveTabTtlSeconds,
+        extra: {
+          validationRegistryAddress,
+          validationChainId,
+          validatorAddress,
+          validatorAgentId: toHex(validatorAgentId),
+          minValidationScore,
+          requiredValidationTag,
+        },
+      };
+      const paymentRequired: X402PaymentRequired = {
+        x402Version: 2,
+        resource: {
+          url: `${resolveFacilitatorUrl()}/resource/e2e-v2`,
+          description: 'e2e-v2',
+          mimeType: 'application/json',
+        },
+        accepts: [requirements],
+      };
+      const signed = await facilitatorFlow!.signPaymentV2(paymentRequired, requirements, payerAddress);
+      header = signed.header;
+      envelope = decodePaymentHeader(signed.header);
+      const builtClaims = claimsFromEnvelope(envelope);
+      if (!(builtClaims instanceof PaymentGuaranteeRequestClaimsV2)) {
+        throw new Error('expected V2 claims from facilitator signPaymentV2');
+      }
+      claims = builtClaims;
+      signature = signed.signature.signature;
+      scheme = signed.signature.scheme;
+      timestamp = claims.timestamp;
+      if (!facilitatorFlow?.lastTab) {
+        throw new Error('facilitator did not return a tab');
+      }
+      tab = {
+        tabId: claims.tabId,
+        nextReqId: claims.reqId,
+        assetAddress: facilitatorFlow.lastTab.assetAddress,
+      };
+    } else {
+      const createdTab = await recipientClient.recipient.createTab(
+        payerAddress,
+        recipientAddress,
+        tokenAddress,
+        effectiveTabTtlSeconds
+      );
+      tab = {
+        tabId: createdTab.tabId,
+        nextReqId: createdTab.nextReqId,
+        assetAddress: createdTab.assetAddress,
+      };
+      const baseClaims = PaymentGuaranteeRequestClaims.new(
+        payerAddress,
+        recipientAddress,
+        tab.tabId,
+        guaranteeAmount,
+        timestamp,
+        tab.assetAddress,
+        tab.nextReqId
+      );
+      const validationSubjectHash = computeValidationSubjectHash(baseClaims);
+      logStep('Build V2 base claims', {
+        tabId: toHex(baseClaims.tabId),
+        reqId: toHex(baseClaims.reqId),
+        amount: toHex(baseClaims.amount),
+        assetAddress: baseClaims.assetAddress,
+        validationSubjectHash,
+      });
+
+      const partial = new PaymentGuaranteeRequestClaimsV2({
+        userAddress: baseClaims.userAddress,
+        recipientAddress: baseClaims.recipientAddress,
+        tabId: baseClaims.tabId,
+        reqId: baseClaims.reqId,
+        amount: baseClaims.amount,
+        timestamp: baseClaims.timestamp,
+        assetAddress: baseClaims.assetAddress,
+        validationRegistryAddress,
+        validationRequestHash: '0x' + '00'.repeat(32),
+        validationChainId,
+        validatorAddress,
+        validatorAgentId,
+        minValidationScore,
+        validationSubjectHash,
+        requiredValidationTag,
+      });
+      const validationRequestHash = computeValidationRequestHash(partial);
+      claims = new PaymentGuaranteeRequestClaimsV2({
+        ...partial,
+        validationRequestHash,
+      });
+      const signed = await payerClient.user.signPayment(claims, SigningScheme.EIP712);
+      signature = signed.signature;
+      scheme = signed.scheme;
+    }
     logStep('Prepare V2 inputs', {
       tabId: toHex(tab.tabId),
       nextReqId: toHex(tab.nextReqId),
@@ -939,61 +1378,41 @@ describeE2E('credit flow e2e', () => {
       timestamp,
     });
 
-    const baseClaims = PaymentGuaranteeRequestClaims.new(
-      payerAddress,
-      recipientAddress,
-      tab.tabId,
-      guaranteeAmount,
-      timestamp,
-      tab.assetAddress,
-      tab.nextReqId
-    );
-    const validationSubjectHash = computeValidationSubjectHash(baseClaims);
-    logStep('Build V2 base claims', {
-      tabId: toHex(baseClaims.tabId),
-      reqId: toHex(baseClaims.reqId),
-      amount: toHex(baseClaims.amount),
-      assetAddress: baseClaims.assetAddress,
-      validationSubjectHash,
-    });
-
-    const partial = new PaymentGuaranteeRequestClaimsV2({
-      userAddress: baseClaims.userAddress,
-      recipientAddress: baseClaims.recipientAddress,
-      tabId: baseClaims.tabId,
-      reqId: baseClaims.reqId,
-      amount: baseClaims.amount,
-      timestamp: baseClaims.timestamp,
-      assetAddress: baseClaims.assetAddress,
-      validationRegistryAddress,
-      validationRequestHash: '0x' + '00'.repeat(32),
-      validationChainId,
-      validatorAddress,
-      validatorAgentId,
-      minValidationScore,
-      validationSubjectHash,
-      requiredValidationTag,
-    });
-    const validationRequestHash = computeValidationRequestHash(partial);
-    const claims = new PaymentGuaranteeRequestClaimsV2({
-      ...partial,
-      validationRequestHash,
-    });
     logStep('Finalize V2 claims', {
       tabId: toHex(claims.tabId),
       reqId: toHex(claims.reqId),
-      validationRequestHash,
+      validationRequestHash: claims.validationRequestHash,
       validationSubjectHash: claims.validationSubjectHash,
       validatorAgentId: toHex(claims.validatorAgentId),
     });
 
-    const { signature, scheme } = await payerClient.user.signPayment(claims, SigningScheme.EIP712);
     logStep('Sign V2 claims', {
       scheme,
       signature: previewHex(signature),
     });
 
-    const cert = await recipientClient.recipient.issuePaymentGuarantee(claims, signature, scheme);
+    const cert =
+      mode === 'facilitator'
+        ? await issueGuaranteeViaFacilitator(2, header!, envelope!, {
+            scheme: '4mica-credit',
+            network,
+            asset: tokenAddress,
+            amount: guaranteeAmount.toString(),
+            payTo: recipientAddress,
+            maxTimeoutSeconds: effectiveTabTtlSeconds,
+            extra: {
+              validationRegistryAddress,
+              validationChainId,
+              validatorAddress,
+              validatorAgentId: toHex(validatorAgentId),
+              minValidationScore,
+              requiredValidationTag,
+            },
+          })
+        : await recipientClient.recipient.issuePaymentGuarantee(claims, signature, scheme);
+    if (!cert) {
+      return;
+    }
     logStep('Issue V2 guarantee', {
       claims: previewHex(cert.claims, 24),
       blsSignature: previewHex(cert.signature, 24),

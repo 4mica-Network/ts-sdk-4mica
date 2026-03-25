@@ -1,6 +1,6 @@
 import { toBytes } from 'viem';
 import { getAny } from './serde';
-import { ValidationError, normalizeAddress, parseU256 } from './utils';
+import { ValidationError, ensureHexPrefix, normalizeAddress, parseU256 } from './utils';
 
 export {
   ADMIN_API_KEY_HEADER,
@@ -133,13 +133,13 @@ export class PaymentGuaranteeRequestClaimsV2 extends PaymentGuaranteeRequestClai
         `minValidationScore must be in [1, 100], got ${init.minValidationScore}`
       );
     }
-    this.validationRegistryAddress = init.validationRegistryAddress;
-    this.validationRequestHash = init.validationRequestHash;
+    this.validationRegistryAddress = normalizeAddress(init.validationRegistryAddress);
+    this.validationRequestHash = ensureHexPrefix(init.validationRequestHash).toLowerCase();
     this.validationChainId = init.validationChainId;
-    this.validatorAddress = init.validatorAddress;
+    this.validatorAddress = normalizeAddress(init.validatorAddress);
     this.validatorAgentId = init.validatorAgentId;
     this.minValidationScore = init.minValidationScore;
-    this.validationSubjectHash = init.validationSubjectHash;
+    this.validationSubjectHash = ensureHexPrefix(init.validationSubjectHash).toLowerCase();
     this.requiredValidationTag = init.requiredValidationTag;
   }
 }

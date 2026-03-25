@@ -84,7 +84,7 @@ export function serializePaymentClaimsV2(
     validator_address: claims.validatorAddress.toLowerCase(),
     validator_agent_id: serializeU256(claims.validatorAgentId),
     min_validation_score: claims.minValidationScore,
-    validation_subject_hash: claims.validationSubjectHash,
+    validation_subject_hash: claims.validationSubjectHash.toLowerCase(),
     required_validation_tag: claims.requiredValidationTag,
   };
 }
