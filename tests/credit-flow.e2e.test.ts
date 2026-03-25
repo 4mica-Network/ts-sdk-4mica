@@ -66,7 +66,10 @@ const describeEthAmount = (amount: bigint): string =>
   `${formatEther(amount)} (${amount.toString()})`;
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 const toHex = (value: bigint): string => `0x${value.toString(16)}`;
-const parseU256Like = (value: string | bigint | number | null | undefined, field: string): bigint => {
+const parseU256Like = (
+  value: string | bigint | number | null | undefined,
+  field: string
+): bigint => {
   if (typeof value === 'bigint') return value;
   if (typeof value === 'number') return BigInt(value);
   if (typeof value === 'string' && value.trim()) return BigInt(value);
@@ -157,10 +160,7 @@ const claimsFromEnvelope = (
   );
 };
 
-const postFacilitatorJson = async <T>(
-  path: string,
-  body: Record<string, unknown>
-): Promise<T> => {
+const postFacilitatorJson = async <T>(path: string, body: Record<string, unknown>): Promise<T> => {
   const response = await fetch(`${resolveFacilitatorUrl()}${path}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -768,7 +768,11 @@ describeE2E('credit flow e2e', () => {
             asset: tokenAddress,
             maxTimeoutSeconds: tabTtlSeconds,
           })
-        : await recipientClient.recipient.issuePaymentGuarantee(paidClaims, paidSignature, paidScheme);
+        : await recipientClient.recipient.issuePaymentGuarantee(
+            paidClaims,
+            paidSignature,
+            paidScheme
+          );
     if (!paidCert) {
       return;
     }
@@ -1289,7 +1293,11 @@ describeE2E('credit flow e2e', () => {
         },
         accepts: [requirements],
       };
-      const signed = await facilitatorFlow!.signPaymentV2(paymentRequired, requirements, payerAddress);
+      const signed = await facilitatorFlow!.signPaymentV2(
+        paymentRequired,
+        requirements,
+        payerAddress
+      );
       header = signed.header;
       envelope = decodePaymentHeader(signed.header);
       const builtClaims = claimsFromEnvelope(envelope);
