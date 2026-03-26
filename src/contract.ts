@@ -272,15 +272,13 @@ export class ContractGateway {
   ) {
     const { gas, receipt } = this.splitWaitOptions(waitOptions);
     const hash = await this.enqueueTx(() =>
-      this.contract.write.payTabInERC20Token([
-        parseU256(tabId),
-        erc20Token as Hex,
-        parseU256(amount),
-        recipient as Hex,
-      ], {
-        gas: gas ?? DEFAULT_PAY_TAB_ERC20_GAS_LIMIT,
-        ...this.defaultFeeParams(),
-      })
+      this.contract.write.payTabInERC20Token(
+        [parseU256(tabId), erc20Token as Hex, parseU256(amount), recipient as Hex],
+        {
+          gas: gas ?? DEFAULT_PAY_TAB_ERC20_GAS_LIMIT,
+          ...this.defaultFeeParams(),
+        }
+      )
     );
 
     return this.publicClient.waitForTransactionReceipt({ hash, ...receipt });
