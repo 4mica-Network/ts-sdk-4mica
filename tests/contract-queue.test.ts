@@ -125,6 +125,8 @@ describe('ContractGateway transaction queue', () => {
     );
 
     expect(contract.write.remunerate).toHaveBeenCalledTimes(1);
-    expect(contract.write.remunerate.mock.calls[0]?.[1]).toEqual({ gas: 8_000_000n });
+    expect(contract.write.remunerate.mock.calls[0]?.[1]).toMatchObject({
+      gas: 8_000_000n,
+    });
   });
 });

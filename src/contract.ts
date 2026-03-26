@@ -9,6 +9,7 @@ import {
   Account,
   GetContractReturnType,
   HttpTransport,
+  parseGwei,
 } from 'viem';
 import { core4micaAbi } from './abi/core4mica';
 import { getChain } from './chain';
@@ -41,6 +42,9 @@ export type TxReceiptWaitOptions = {
 };
 
 const DEFAULT_REMUNERATE_GAS_LIMIT = 8_000_000n;
+const DEFAULT_PAY_TAB_ERC20_GAS_LIMIT = 300_000n;
+const DEFAULT_MAX_FEE_PER_GAS = parseGwei('0.1');
+const DEFAULT_MAX_PRIORITY_FEE_PER_GAS = parseGwei('0.1');
 
 export class ContractGateway {
   readonly publicClient: TPublicClient;
@@ -113,6 +117,13 @@ export class ContractGateway {
     return run;
   }
 
+  private defaultFeeParams() {
+    return {
+      maxFeePerGas: DEFAULT_MAX_FEE_PER_GAS,
+      maxPriorityFeePerGas: DEFAULT_MAX_PRIORITY_FEE_PER_GAS,
+    } as const;
+  }
+
   private splitWaitOptions(waitOptions?: TxReceiptWaitOptions): {
     receipt: { timeout?: number; pollingInterval?: number };
     gas?: bigint;
@@ -149,10 +160,30 @@ export class ContractGateway {
   ) {
     const { receipt } = this.splitWaitOptions(waitOptions);
     const erc20 = this.erc20(token);
-    // spender address logic
     const spender = this.contract.address;
-    const hash = await this.enqueueTx(() => erc20.write.approve([spender, parseU256(amount)]));
-    return this.publicClient.waitForTransactionReceipt({ hash, ...receipt });
+    const targetAllowance = parseU256(amount);
+
+    const sendApprove = async (value: bigint) => {
+      const hash = await this.enqueueTx(() =>
+        erc20.write.approve([spender, value], this.defaultFeeParams())
+      );
+      const txReceipt = await this.publicClient.waitForTransactionReceipt({ hash, ...receipt });
+      if (txReceipt.status !== 'success') {
+        throw new ContractError(`approve transaction reverted: ${hash}`);
+      }
+      return txReceipt;
+    };
+
+    try {
+      return await sendApprove(targetAllowance);
+    } catch (error) {
+      // Some ERC20s require resetting allowance to zero before setting a new value.
+      if (targetAllowance === 0n) {
+        throw error;
+      }
+      await sendApprove(0n);
+      return sendApprove(targetAllowance);
+    }
   }
 
   async deposit(
@@ -165,10 +196,15 @@ export class ContractGateway {
 
     if (erc20Token) {
       hash = await this.enqueueTx(() =>
-        this.contract.write.depositStablecoin([erc20Token as Hex, parseU256(amount)])
+        this.contract.write.depositStablecoin(
+          [erc20Token as Hex, parseU256(amount)],
+          this.defaultFeeParams()
+        )
       );
     } else {
-      hash = await this.enqueueTx(() => this.contract.write.deposit({ value: parseU256(amount) }));
+      hash = await this.enqueueTx(() =>
+        this.contract.write.deposit({ value: parseU256(amount), ...this.defaultFeeParams() })
+      );
     }
 
     return this.publicClient.waitForTransactionReceipt({ hash, ...receipt });
@@ -221,6 +257,7 @@ export class ContractGateway {
         to: recipient as Hex,
         value: parseU256(amount),
         data: hexFromBytes(data),
+        ...this.defaultFeeParams(),
       })
     );
     return this.publicClient.waitForTransactionReceipt({ hash, ...receipt });
@@ -233,14 +270,17 @@ export class ContractGateway {
     recipient: string,
     waitOptions?: TxReceiptWaitOptions
   ) {
-    const { receipt } = this.splitWaitOptions(waitOptions);
+    const { gas, receipt } = this.splitWaitOptions(waitOptions);
     const hash = await this.enqueueTx(() =>
       this.contract.write.payTabInERC20Token([
         parseU256(tabId),
         erc20Token as Hex,
         parseU256(amount),
         recipient as Hex,
-      ])
+      ], {
+        gas: gas ?? DEFAULT_PAY_TAB_ERC20_GAS_LIMIT,
+        ...this.defaultFeeParams(),
+      })
     );
 
     return this.publicClient.waitForTransactionReceipt({ hash, ...receipt });
@@ -257,10 +297,12 @@ export class ContractGateway {
     let hash: Hex;
     if (erc20Token) {
       hash = await this.enqueueTx(() =>
-        this.contract.write.requestWithdrawal([erc20Token as Hex, value])
+        this.contract.write.requestWithdrawal([erc20Token as Hex, value], this.defaultFeeParams())
       );
     } else {
-      hash = await this.enqueueTx(() => this.contract.write.requestWithdrawal([value]));
+      hash = await this.enqueueTx(() =>
+        this.contract.write.requestWithdrawal([value], this.defaultFeeParams())
+      );
     }
 
     return this.publicClient.waitForTransactionReceipt({ hash, ...receipt });
@@ -270,9 +312,13 @@ export class ContractGateway {
     const { receipt } = this.splitWaitOptions(waitOptions);
     let hash: Hex;
     if (erc20Token) {
-      hash = await this.enqueueTx(() => this.contract.write.cancelWithdrawal([erc20Token as Hex]));
+      hash = await this.enqueueTx(() =>
+        this.contract.write.cancelWithdrawal([erc20Token as Hex], this.defaultFeeParams())
+      );
     } else {
-      hash = await this.enqueueTx(() => this.contract.write.cancelWithdrawal());
+      hash = await this.enqueueTx(() =>
+        this.contract.write.cancelWithdrawal(this.defaultFeeParams())
+      );
     }
 
     return this.publicClient.waitForTransactionReceipt({ hash, ...receipt });
@@ -283,10 +329,12 @@ export class ContractGateway {
     let hash: Hex;
     if (erc20Token) {
       hash = await this.enqueueTx(() =>
-        this.contract.write.finalizeWithdrawal([erc20Token as Hex])
+        this.contract.write.finalizeWithdrawal([erc20Token as Hex], this.defaultFeeParams())
       );
     } else {
-      hash = await this.enqueueTx(() => this.contract.write.finalizeWithdrawal());
+      hash = await this.enqueueTx(() =>
+        this.contract.write.finalizeWithdrawal(this.defaultFeeParams())
+      );
     }
 
     return this.publicClient.waitForTransactionReceipt({ hash, ...receipt });
@@ -311,6 +359,7 @@ export class ContractGateway {
     const hash = await this.enqueueTx(() =>
       this.contract.write.remunerate([hexFromBytes(claimsBlob), sigStruct], {
         gas: gas ?? DEFAULT_REMUNERATE_GAS_LIMIT,
+        ...this.defaultFeeParams(),
       })
     );
     return this.publicClient.waitForTransactionReceipt({ hash, ...receipt });

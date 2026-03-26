@@ -144,6 +144,23 @@ The SDK exposes three main entry points:
 - `client.recipient`: recipient-side operations (tabs, guarantees, remuneration)
 - `X402Flow`: helper for 402-protected HTTP resources
 
+### End-to-end Example (Base Sepolia + x402 v2)
+
+See `examples/base-sepolia-x402-facilitator-e2e.ts` for a full flow in the `examples` folder:
+- deposit collateral
+- create/get a tab via facilitator
+- issue and verify V1 + V2 guarantees
+- `payTab` in ERC20 for V1
+- remunerate V2 only after `wachai-validation-sdk` returns a passing ERC-8004 validation
+- submit + finalize withdrawal
+
+Run it with:
+
+```bash
+cp examples/.env.x402-facilitator-e2e.example examples/.env.x402-facilitator-e2e
+npx dotenv-cli -e examples/.env.x402-facilitator-e2e -- npm run example:base-sepolia:x402-v2
+```
+
 ### X402 flow (HTTP 402)
 
 The X402 helper turns `paymentRequirements` from a `402 Payment Required` response into an

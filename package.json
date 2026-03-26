@@ -42,11 +42,14 @@
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "example:base-sepolia:x402-v2": "node_modules/.bin/tsx examples/base-sepolia-x402-facilitator-e2e.ts",
     "lint": "eslint . --ext .ts",
     "fmt": "prettier --check \"{src,tests}/**/*.{ts,js,json}\""
   },
   "dependencies": {
+    "@4mica/x402": "file:../x402-4mica/packages/typescript/x402",
     "@noble/curves": "^2.0.1",
+    "@quillai-network/wachai-validation-sdk": "^0.1.0",
     "viem": "^2.45.1"
   },
   "devDependencies": {
