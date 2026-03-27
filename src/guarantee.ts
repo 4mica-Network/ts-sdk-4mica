@@ -21,7 +21,7 @@ const CLAIM_TYPES = [
 
 // V2 adds: validation_registry_address, validation_request_hash, validation_chain_id,
 //          validator_address, validator_agent_id, min_validation_score,
-//          validation_subject_hash, required_validation_tag (dynamic string)
+//          validation_subject_hash, job_hash, required_validation_tag (dynamic string)
 const CLAIM_TYPES_V2 = [
   { type: 'bytes32' }, // domain
   { type: 'uint256' }, // tab_id
@@ -40,6 +40,7 @@ const CLAIM_TYPES_V2 = [
   { type: 'uint256' }, // validator_agent_id
   { type: 'uint8' }, // min_validation_score
   { type: 'bytes32' }, // validation_subject_hash
+  { type: 'bytes32' }, // job_hash
   { type: 'string' }, // required_validation_tag (dynamic)
 ] as const;
 
@@ -64,6 +65,7 @@ const CLAIM_TYPES_V2_TUPLE = [
       { name: 'validatorAgentId', type: 'uint256' },
       { name: 'minValidationScore', type: 'uint8' },
       { name: 'validationSubjectHash', type: 'bytes32' },
+      { name: 'jobHash', type: 'bytes32' },
       { name: 'requiredValidationTag', type: 'string' },
     ],
   },
@@ -88,7 +90,7 @@ function normalizeHexBytes(data: string | Uint8Array): Hex {
  * ABI-encode a {@link PaymentGuaranteeClaims} object into a hex string.
  *
  * Produces the outer `(uint64 version, bytes innerClaims)` envelope format expected
- * by the Core4Mica contract. Supports V1 (10 fields) and V2 (18 fields with validation policy).
+ * by the Core4Mica contract. Supports V1 (10 fields) and V2 (19 fields with validation policy).
  *
  * @param claims - Decoded claims to encode. Must have `version` set to `1` or `2`.
  * @returns `0x`-prefixed hex string of the ABI-encoded envelope.
@@ -141,6 +143,7 @@ export function encodeGuaranteeClaims(claims: PaymentGuaranteeClaims): string {
         validatorAgentId: p.validatorAgentId,
         minValidationScore: p.minValidationScore,
         validationSubjectHash: ensureHexPrefix(p.validationSubjectHash),
+        jobHash: ensureHexPrefix(p.jobHash),
         requiredValidationTag: p.requiredValidationTag,
       },
     ]);
@@ -259,7 +262,8 @@ function decodeV2Claims(encoded: Hex): PaymentGuaranteeClaims {
         validatorAgentId: decoded[14],
         minValidationScore: decoded[15],
         validationSubjectHash: decoded[16],
-        requiredValidationTag: decoded[17],
+        jobHash: decoded[17],
+        requiredValidationTag: decoded[18],
       });
     } catch (flatErr) {
       throw new VerificationError(
@@ -287,6 +291,7 @@ function buildDecodedV2Claims(decoded: {
   validatorAgentId: unknown;
   minValidationScore: unknown;
   validationSubjectHash: unknown;
+  jobHash: unknown;
   requiredValidationTag: unknown;
 }): PaymentGuaranteeClaims {
   const {
@@ -307,6 +312,7 @@ function buildDecodedV2Claims(decoded: {
     validatorAgentId,
     minValidationScore,
     validationSubjectHash,
+    jobHash,
     requiredValidationTag,
   } = decoded;
   if (claimsVersion !== 2n) {
@@ -321,6 +327,7 @@ function buildDecodedV2Claims(decoded: {
     validatorAgentId: parseU256(validatorAgentId as bigint | number | string),
     minValidationScore: Number(minValidationScore as bigint | number | string),
     validationSubjectHash: validationSubjectHash as string,
+    jobHash: jobHash as string,
     requiredValidationTag: requiredValidationTag as string,
   };
 

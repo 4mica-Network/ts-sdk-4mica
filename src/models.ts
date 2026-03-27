@@ -89,6 +89,7 @@ export interface PaymentGuaranteeValidationPolicyV2 {
   validatorAgentId: bigint;
   minValidationScore: number;
   validationSubjectHash: string;
+  jobHash: string;
   requiredValidationTag: string;
 }
 
@@ -97,6 +98,7 @@ export interface PaymentGuaranteeValidationPolicyV2 {
  *
  * Compute `validationSubjectHash` via `computeValidationSubjectHash(baseClaims)` and
  * `validationRequestHash` via `computeValidationRequestHash(partialV2)` before constructing.
+ * The `jobHash` must be provided and included in the validation request hash.
  *
  * @throws {@link ValidationError} if `minValidationScore` is outside [1, 100].
  */
@@ -108,6 +110,7 @@ export class PaymentGuaranteeRequestClaimsV2 extends PaymentGuaranteeRequestClai
   validatorAgentId: bigint;
   minValidationScore: number;
   validationSubjectHash: string;
+  jobHash: string;
   requiredValidationTag: string;
 
   constructor(init: {
@@ -125,6 +128,7 @@ export class PaymentGuaranteeRequestClaimsV2 extends PaymentGuaranteeRequestClai
     validatorAgentId: bigint;
     minValidationScore: number;
     validationSubjectHash: string;
+    jobHash: string;
     requiredValidationTag: string;
   }) {
     super(init);
@@ -140,6 +144,7 @@ export class PaymentGuaranteeRequestClaimsV2 extends PaymentGuaranteeRequestClai
     this.validatorAgentId = init.validatorAgentId;
     this.minValidationScore = init.minValidationScore;
     this.validationSubjectHash = ensureHexPrefix(init.validationSubjectHash).toLowerCase();
+    this.jobHash = ensureHexPrefix(init.jobHash).toLowerCase();
     this.requiredValidationTag = init.requiredValidationTag;
   }
 }

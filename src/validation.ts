@@ -6,7 +6,7 @@ import { ensureHexPrefix } from './utils';
 export const VALIDATION_SUBJECT_BINDING_DOMAIN = '4MICA_VALIDATION_SUBJECT_V1';
 
 /** Binding domain string used as a prefix when hashing validation requests. */
-export const VALIDATION_REQUEST_BINDING_DOMAIN = '4MICA_VALIDATION_REQUEST_V1';
+export const VALIDATION_REQUEST_BINDING_DOMAIN = '4MICA_VALIDATION_REQUEST_V2';
 
 /**
  * Compute the `validationSubjectHash` for a V2 payment guarantee request.
@@ -49,7 +49,7 @@ export function computeValidationSubjectHash(claims: PaymentGuaranteeRequestClai
  * Compute the `validationRequestHash` for a V2 payment guarantee request.
  *
  * Binds the full validation policy (chain, registry, validator, score threshold,
- * subject hash, required tag) to a keccak256 hash prefixed by
+ * subject hash, required tag, job hash) to a keccak256 hash prefixed by
  * {@link VALIDATION_REQUEST_BINDING_DOMAIN}. This hash is included in the V2 claims
  * that are BLS-signed by the core service, allowing on-chain verification that the
  * validation policy was not tampered with.
@@ -72,6 +72,7 @@ export function computeValidationRequestHash(claims: PaymentGuaranteeRequestClai
       { type: 'bytes32' },
       { type: 'uint8' },
       { type: 'bytes32' },
+      { type: 'bytes32' },
     ],
     [
       bindingDomain,
@@ -82,6 +83,7 @@ export function computeValidationRequestHash(claims: PaymentGuaranteeRequestClai
       ensureHexPrefix(claims.validationSubjectHash),
       claims.minValidationScore,
       tagHash,
+      ensureHexPrefix(claims.jobHash),
     ]
   );
   return keccak256(encoded);

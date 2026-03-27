@@ -197,6 +197,7 @@ const V2_BASE = {
   validatorAddress: '0x0000000000000000000000000000000000000022',
   validatorAgentId: 1n,
   validationSubjectHash: '0x' + '00'.repeat(32),
+  jobHash: '0x' + '11'.repeat(32),
   requiredValidationTag: '',
 };
 
@@ -221,6 +222,7 @@ describe('PaymentGuaranteeRequestClaimsV2 boundaries', () => {
       validationRequestHash: 'AB'.repeat(32),
       validatorAddress: '0x00000000000000000000000000000000000000BB',
       validationSubjectHash: 'CD'.repeat(32),
+      jobHash: 'EF'.repeat(32),
     });
 
     expect(claims.validationRegistryAddress).toBe(
@@ -229,6 +231,7 @@ describe('PaymentGuaranteeRequestClaimsV2 boundaries', () => {
     expect(claims.validatorAddress).toBe(getAddress('0x00000000000000000000000000000000000000BB'));
     expect(claims.validationRequestHash).toBe(`0x${'ab'.repeat(32)}`);
     expect(claims.validationSubjectHash).toBe(`0x${'cd'.repeat(32)}`);
+    expect(claims.jobHash).toBe(`0x${'ef'.repeat(32)}`);
   });
 });
 

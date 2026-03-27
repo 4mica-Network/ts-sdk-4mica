@@ -35,6 +35,7 @@ export interface PaymentRequirementsExtra {
   validatorAddress?: string;
   validatorAgentId?: string;
   minValidationScore?: number;
+  jobHash?: string;
   requiredValidationTag?: string;
 }
 

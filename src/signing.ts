@@ -49,6 +49,7 @@ export const GUARANTEE_EIP712_TYPES_V2 = {
     { name: 'validatorAgentId', type: 'uint256' },
     { name: 'minValidationScore', type: 'uint8' },
     { name: 'validationSubjectHash', type: 'bytes32' },
+    { name: 'jobHash', type: 'bytes32' },
     { name: 'requiredValidationTag', type: 'string' },
   ],
 } as const;
@@ -95,6 +96,7 @@ export type GuaranteeTypedDataV2 = {
     validatorAgentId: bigint;
     minValidationScore: number;
     validationSubjectHash: Hex;
+    jobHash: Hex;
     requiredValidationTag: string;
   };
 };
@@ -285,6 +287,7 @@ export function buildGuaranteeTypedDataV2(
       validatorAgentId: claims.validatorAgentId,
       minValidationScore: claims.minValidationScore,
       validationSubjectHash: ensureHexPrefix(claims.validationSubjectHash),
+      jobHash: ensureHexPrefix(claims.jobHash),
       requiredValidationTag: claims.requiredValidationTag,
     },
   } as const;
@@ -307,6 +310,7 @@ export function encodeGuaranteeEip191V2(claims: PaymentGuaranteeRequestClaimsV2)
       { type: 'uint256' },
       { type: 'uint8' },
       { type: 'bytes32' },
+      { type: 'bytes32' },
       { type: 'string' },
     ],
     [
@@ -328,6 +332,7 @@ export function encodeGuaranteeEip191V2(claims: PaymentGuaranteeRequestClaimsV2)
       (claims.validationSubjectHash.startsWith('0x')
         ? claims.validationSubjectHash
         : `0x${claims.validationSubjectHash}`) as Hex,
+      (claims.jobHash.startsWith('0x') ? claims.jobHash : `0x${claims.jobHash}`) as Hex,
       claims.requiredValidationTag,
     ]
   );

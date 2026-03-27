@@ -32,6 +32,7 @@ export interface PaymentPayloadClaimsV2 extends PaymentPayloadClaimsBase {
   validator_agent_id: string;
   min_validation_score: number;
   validation_subject_hash: string;
+  job_hash: string;
   required_validation_tag: string;
 }
 
@@ -67,7 +68,7 @@ export function serializePaymentClaims(
 /**
  * Serialize V2 payment claims to the wire format expected by the core RPC.
  *
- * Extends the V1 serialisation with the eight additional validation policy fields.
+ * Extends the V1 serialisation with the nine additional validation policy fields.
  *
  * @param claims - V2 payment guarantee request claims with validation policy.
  * @returns JSON-serialisable object with snake_case keys and hex-encoded `uint256` fields.
@@ -85,6 +86,7 @@ export function serializePaymentClaimsV2(
     validator_agent_id: serializeU256(claims.validatorAgentId),
     min_validation_score: claims.minValidationScore,
     validation_subject_hash: claims.validationSubjectHash.toLowerCase(),
+    job_hash: claims.jobHash.toLowerCase(),
     required_validation_tag: claims.requiredValidationTag,
   };
 }

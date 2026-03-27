@@ -196,6 +196,7 @@ describe('credit-flow coverage', () => {
       validatorAgentId: 7n,
       minValidationScore: 80,
       validationSubjectHash: subjectHash,
+      jobHash: '0x' + '11'.repeat(32),
       requiredValidationTag: 'test',
     });
     const v2claims = new PaymentGuaranteeRequestClaimsV2({
@@ -250,6 +251,7 @@ describe('credit-flow coverage', () => {
         validatorAgentId: 1n,
         minValidationScore: 80,
         validationSubjectHash: '0x' + '00'.repeat(32),
+        jobHash: '0x' + '11'.repeat(32),
         requiredValidationTag: '',
       },
     });

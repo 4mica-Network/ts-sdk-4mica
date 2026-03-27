@@ -40,6 +40,7 @@ function buildV2Claims(userAddress: string): PaymentGuaranteeRequestClaimsV2 {
     validatorAgentId: 7n,
     minValidationScore: 80,
     validationSubjectHash,
+    jobHash: '0x' + '11'.repeat(32),
     requiredValidationTag: '',
   });
   return new PaymentGuaranteeRequestClaimsV2({
@@ -134,6 +135,7 @@ describe('PaymentGuaranteeRequestClaimsV2', () => {
           validatorAgentId: 1n,
           minValidationScore: 0,
           validationSubjectHash: '0x' + '00'.repeat(32),
+          jobHash: '0x' + '11'.repeat(32),
           requiredValidationTag: '',
         })
     ).toThrow('minValidationScore');
@@ -157,6 +159,7 @@ describe('PaymentGuaranteeRequestClaimsV2', () => {
           validatorAgentId: 1n,
           minValidationScore: 101,
           validationSubjectHash: '0x' + '00'.repeat(32),
+          jobHash: '0x' + '11'.repeat(32),
           requiredValidationTag: '',
         })
     ).toThrow('minValidationScore');

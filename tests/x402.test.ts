@@ -290,6 +290,7 @@ describe('X402Flow', () => {
         validatorAddress: '0x0000000000000000000000000000000000000022',
         validatorAgentId: '7',
         minValidationScore: 80,
+        jobHash: '0x' + '11'.repeat(32),
         requiredValidationTag: 'trust',
       },
     };
@@ -312,6 +313,7 @@ describe('X402Flow', () => {
     expect(claims.validation_registry_address).toBe('0x0000000000000000000000000000000000000011');
     expect(claims.validator_address).toBe('0x0000000000000000000000000000000000000022');
     expect(claims.min_validation_score).toBe(80);
+    expect(claims.job_hash).toBe('0x' + '11'.repeat(32));
     expect(claims.required_validation_tag).toBe('trust');
     expect(typeof claims.validation_request_hash).toBe('string');
     expect(typeof claims.validation_subject_hash).toBe('string');
@@ -361,6 +363,7 @@ describe('X402Flow', () => {
         validatorAddress: '0x0000000000000000000000000000000000000022',
         validatorAgentId: '7',
         minValidationScore: 80,
+        jobHash: '0x' + '11'.repeat(32),
       },
     };
     const paymentRequired: X402PaymentRequired = {

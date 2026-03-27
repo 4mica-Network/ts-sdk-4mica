@@ -145,6 +145,7 @@ const claimsFromEnvelope = (
       validatorAgentId: parseU256Like(claims.validator_agent_id, 'validator_agent_id'),
       minValidationScore: claims.min_validation_score,
       validationSubjectHash: claims.validation_subject_hash,
+      jobHash: claims.job_hash,
       requiredValidationTag: claims.required_validation_tag ?? '',
     });
   }
@@ -1251,6 +1252,7 @@ describeE2E('credit flow e2e', () => {
     const validatorAgentId = BigInt(process.env['VALIDATOR_AGENT_ID'] ?? '1');
     const minValidationScore = Number(process.env['MIN_VALIDATION_SCORE'] ?? '80');
     const requiredValidationTag = process.env['VALIDATION_TAG'] ?? '';
+    const jobHash = '0x' + '11'.repeat(32);
     const network = `eip155:${payerClient.params.chainId}`;
     const facilitatorFlow =
       mode === 'facilitator' ? new FacilitatorX402Flow(payerClient.user) : undefined;
@@ -1281,6 +1283,7 @@ describeE2E('credit flow e2e', () => {
           validatorAddress,
           validatorAgentId: toHex(validatorAgentId),
           minValidationScore,
+          jobHash,
           requiredValidationTag,
         },
       };
@@ -1361,6 +1364,7 @@ describeE2E('credit flow e2e', () => {
         validatorAgentId,
         minValidationScore,
         validationSubjectHash,
+        jobHash,
         requiredValidationTag,
       });
       const validationRequestHash = computeValidationRequestHash(partial);
@@ -1382,6 +1386,7 @@ describeE2E('credit flow e2e', () => {
       validatorAgentId: toHex(validatorAgentId),
       validationChainId,
       minValidationScore,
+      jobHash,
       requiredValidationTag,
       timestamp,
     });
@@ -1414,6 +1419,7 @@ describeE2E('credit flow e2e', () => {
               validatorAddress,
               validatorAgentId: toHex(validatorAgentId),
               minValidationScore,
+              jobHash,
               requiredValidationTag,
             },
           })

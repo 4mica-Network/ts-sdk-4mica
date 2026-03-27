@@ -32,6 +32,7 @@ type ValidationPolicyExtra = Required<
     | 'validatorAddress'
     | 'validatorAgentId'
     | 'minValidationScore'
+    | 'jobHash'
   >
 > &
   PaymentRequirementsExtra;
@@ -44,7 +45,8 @@ function hasValidationPolicy(
     extra?.validatorAddress &&
     extra?.validatorAgentId !== undefined &&
     extra?.minValidationScore !== undefined &&
-    extra?.validationChainId !== undefined
+    extra?.validationChainId !== undefined &&
+    extra?.jobHash
   );
 }
 
@@ -134,7 +136,7 @@ export class X402Flow {
    *
    * If `accepted.extra` contains all required validation policy fields
    * (`validationRegistryAddress`, `validatorAddress`, `validatorAgentId`,
-   * `minValidationScore`, `validationChainId`), the claims are built as V2 with
+   * `minValidationScore`, `validationChainId`, `jobHash`), the claims are built as V2 with
    * the computed `validationSubjectHash` and `validationRequestHash`. Otherwise
    * falls back to V1 claims.
    *
@@ -296,6 +298,7 @@ export class X402Flow {
       validatorAgentId: parseU256(extra.validatorAgentId!),
       minValidationScore: extra.minValidationScore!,
       validationSubjectHash,
+      jobHash: extra.jobHash!,
       requiredValidationTag: extra.requiredValidationTag ?? '',
     });
 
