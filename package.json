@@ -39,10 +39,12 @@
     "ethers"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{ recursive: true, force: true })\"",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
     "test": "vitest run",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "example:base-sepolia:x402-v2": "node_modules/.bin/tsx examples/base-sepolia-x402-facilitator-e2e.ts",
+    "example:manual:agents": "node_modules/.bin/tsx examples/manual-agents/demo.ts",
     "lint": "eslint . --ext .ts",
     "fmt": "prettier --check \"{src,tests}/**/*.{ts,js,json}\""
   },
