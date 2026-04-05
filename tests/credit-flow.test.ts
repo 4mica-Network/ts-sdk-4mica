@@ -162,20 +162,28 @@ describe('credit-flow coverage', () => {
   });
 
   it('creates tabs and normalizes ids', async () => {
+    const createPaymentTab = vi.fn().mockResolvedValue({
+      id: '0x10',
+      erc20_token: ASSET,
+      next_req_id: '0x1',
+    });
     const rpc = {
-      createPaymentTab: vi.fn().mockResolvedValue({
-        id: '0x10',
-        erc20_token: ASSET,
-        next_req_id: '0x1',
-      }),
+      createPaymentTab,
     } as unknown as RpcProxy;
     const client = buildClientStub({ rpc });
     const recipient = new RecipientClient(client);
 
-    const result = await recipient.createTab(USER, RECIPIENT, ASSET, 60);
+    const result = await recipient.createTab(USER, RECIPIENT, ASSET, 60, 2);
     expect(result.tabId).toBe(16n);
     expect(result.assetAddress).toBe(ASSET);
     expect(result.nextReqId).toBe(1n);
+    expect(createPaymentTab).toHaveBeenCalledWith({
+      user_address: USER,
+      recipient_address: RECIPIENT,
+      erc20_token: ASSET,
+      ttl: 60,
+      guarantee_version: 2,
+    });
   });
 
   it('builds payment payload with V2 claims', () => {

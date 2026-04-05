@@ -41,6 +41,7 @@ export class RecipientClient {
    * @param recipientAddress - Address of the recipient.
    * @param erc20Token - ERC20 token address for the tab, or `null`/`undefined` for ETH.
    * @param ttl - Optional time-to-live in seconds.
+   * @param guaranteeVersion - Guarantee version for the version-scoped tab identity.
    * @returns `{ tabId, assetAddress, nextReqId }` — the tab ID, the asset address as stored
    *   by the core (use this for all subsequent claims), and the first request ID to use.
    * @throws {@link RpcError} if the request fails.
@@ -49,13 +50,15 @@ export class RecipientClient {
     userAddress: string,
     recipientAddress: string,
     erc20Token: string | undefined | null,
-    ttl?: number | null
+    ttl?: number | null,
+    guaranteeVersion = 1
   ): Promise<{ tabId: bigint; assetAddress: string; nextReqId: bigint }> {
     const body = {
       user_address: normalizeAddress(userAddress),
       recipient_address: normalizeAddress(recipientAddress),
       erc20_token: erc20Token ? normalizeAddress(erc20Token) : null,
       ttl: ttl ?? null,
+      guarantee_version: guaranteeVersion,
     };
     const result = await this.client.rpc.createPaymentTab(body);
     const record = result as Record<string, unknown>;
