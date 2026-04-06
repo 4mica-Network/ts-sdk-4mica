@@ -294,7 +294,7 @@ Notes:
 
 #### RecipientClient Methods
 
-- `createTab(userAddress, recipientAddress, erc20Token?, ttl?)`
+- `createTab(userAddress, recipientAddress, erc20Token?, ttl?, guaranteeVersion?)`
 - `getTabPaymentStatus(tabId)`
 - `issuePaymentGuarantee(claims, signature, scheme)` — accepts V1 or V2 claims
 - `verifyPaymentGuarantee(cert)`
