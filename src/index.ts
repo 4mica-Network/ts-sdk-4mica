@@ -1,5 +1,6 @@
 export * from './errors';
 export * from './constants';
+export * from './networks';
 export * from './config';
 export * from './utils';
 export * from './models';

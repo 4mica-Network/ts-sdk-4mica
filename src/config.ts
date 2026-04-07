@@ -1,6 +1,7 @@
 import { Account, privateKeyToAccount } from 'viem/accounts';
 import { ConfigError } from './errors';
 import { ValidationError, normalizeAddress, normalizePrivateKey, validateUrl } from './utils';
+import { resolveNetworkRpcUrl } from './networks';
 
 /** Validated configuration used to construct a {@link Client}. Produced by {@link ConfigBuilder.build}. */
 export interface Config {
@@ -35,7 +36,7 @@ export interface Config {
  * All fields can also be supplied from environment variables via {@link fromEnv}.
  */
 export class ConfigBuilder {
-  private _rpcUrl: string | undefined = 'https://api.4mica.xyz/';
+  private _rpcUrl: string | undefined = 'https://ethereum.sepolia.4mica.xyz/';
   private _walletPrivateKey: string | undefined;
   private _signer: Account | undefined;
   private _ethereumHttpRpcUrl?: string;
@@ -46,9 +47,36 @@ export class ConfigBuilder {
   private _authUrl?: string;
   private _authRefreshMarginSecs?: number;
 
-  /** Override the 4Mica core RPC URL. Defaults to `https://api.4mica.xyz/`. */
+  /** Set the 4Mica core RPC URL directly. Use {@link network} to select a hosted network by name instead. Defaults to `https://ethereum.sepolia.4mica.xyz/`. */
   rpcUrl(value: string): ConfigBuilder {
     this._rpcUrl = value;
+    return this;
+  }
+
+  /**
+   * Select a hosted 4Mica network by shorthand or CAIP-2 identifier.
+   * Resolves to the corresponding core API URL.
+   * Mutually exclusive with {@link rpcUrl} — last call wins.
+   *
+   * Supported values: `"base-sepolia"` / `"eip155:84532"`,
+   * `"ethereum-sepolia"` / `"eip155:11155111"`.
+   *
+   * @throws {@link ConfigError} if the network is not recognised.
+   *
+   * @example
+   * ```ts
+   * new ConfigBuilder().network("base-sepolia").walletPrivateKey("0x...").build();
+   * new ConfigBuilder().network("eip155:84532").walletPrivateKey("0x...").build();
+   * ```
+   */
+  network(value: string): ConfigBuilder {
+    const url = resolveNetworkRpcUrl(value);
+    if (!url) {
+      throw new ConfigError(
+        `unknown network "${value}". Use a known shorthand (e.g. "base-sepolia") or CAIP-2 id, or call rpcUrl() directly.`
+      );
+    }
+    this._rpcUrl = url;
     return this;
   }
 
@@ -112,6 +140,7 @@ export class ConfigBuilder {
    * Load configuration from environment variables.
    *
    * Recognised variables:
+   * - `4MICA_NETWORK` — shorthand or CAIP-2 id (e.g. `base-sepolia`); takes precedence over `4MICA_RPC_URL`
    * - `4MICA_RPC_URL`
    * - `4MICA_WALLET_PRIVATE_KEY`
    * - `4MICA_ETHEREUM_HTTP_RPC_URL`
@@ -123,6 +152,7 @@ export class ConfigBuilder {
    */
   fromEnv(): ConfigBuilder {
     const env = process.env;
+    if (env['4MICA_NETWORK']) this.network(env['4MICA_NETWORK']);
     if (env['4MICA_RPC_URL']) this._rpcUrl = env['4MICA_RPC_URL'];
     if (env['4MICA_WALLET_PRIVATE_KEY']) this._walletPrivateKey = env['4MICA_WALLET_PRIVATE_KEY'];
     if (env['4MICA_ETHEREUM_HTTP_RPC_URL'])

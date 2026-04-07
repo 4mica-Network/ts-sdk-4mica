@@ -25,12 +25,30 @@ yarn add @4mica/sdk
 
 Node.js 18+ is required.
 
+## Networks
+
+| Shorthand | CAIP-2 | Core API URL |
+|---|---|---|
+| `ethereum-sepolia` | `eip155:11155111` | `https://ethereum.sepolia.4mica.xyz/` |
+| `base-sepolia` | `eip155:84532` | `https://base.sepolia.4mica.xyz/` |
+
+The default network is Ethereum Sepolia. Use `.network()` or the `4MICA_NETWORK` environment
+variable to switch networks.
+
+```ts
+import { NETWORKS } from "@4mica/sdk";
+
+console.log(NETWORKS["base-sepolia"].caip2);   // "eip155:84532"
+console.log(NETWORKS["base-sepolia"].rpcUrl);  // "https://base.sepolia.4mica.xyz/"
+```
+
 ## Initialization and Configuration
 
 The SDK requires a signing key and can use sensible defaults for the rest:
 
 - `walletPrivateKey` (**required** unless `signer` is provided): private key used for signing
-- `rpcUrl` (optional): URL of the 4Mica core RPC server. Defaults to `https://api.4mica.xyz/`.
+- `network` (optional): select a network by shorthand or CAIP-2 id. Defaults to `ethereum-sepolia`.
+- `rpcUrl` (optional): override the core API URL directly (for self-hosted deployments).
 - `ethereumHttpRpcUrl` (optional): Ethereum JSON-RPC endpoint; fetched from core if omitted
 - `contractAddress` (optional): Core4Mica contract address; fetched from core if omitted
 - `adminApiKey` (optional): API key for admin RPCs
@@ -49,7 +67,7 @@ import { Client, ConfigBuilder } from "@4mica/sdk";
 
 async function main() {
   const cfg = new ConfigBuilder()
-    .rpcUrl("https://api.4mica.xyz/")
+    .network("base-sepolia")   // or "ethereum-sepolia" (default)
     .walletPrivateKey("0x...")
     .build();
 
@@ -68,12 +86,14 @@ Set environment variables (example `.env`):
 
 ```bash
 4MICA_WALLET_PRIVATE_KEY="0x..."
-4MICA_RPC_URL="https://api.4mica.xyz/"
+4MICA_NETWORK="base-sepolia"           # shorthand or CAIP-2 id
+# or override URL directly:
+# 4MICA_RPC_URL="https://base.sepolia.4mica.xyz/"
 4MICA_ETHEREUM_HTTP_RPC_URL="http://localhost:8545"
 4MICA_CONTRACT_ADDRESS="0x..."
 4MICA_ADMIN_API_KEY="ak_..."
 4MICA_BEARER_TOKEN="Bearer <access_token>"
-4MICA_AUTH_URL="https://api.4mica.xyz/"
+4MICA_AUTH_URL="https://ethereum.sepolia.4mica.xyz/"
 4MICA_AUTH_REFRESH_MARGIN_SECS="60"
 ```
 
@@ -81,7 +101,7 @@ If you want to set them inline for a single command, use `env` since most shells
 variable names that start with a digit:
 
 ```bash
-env 4MICA_WALLET_PRIVATE_KEY="0x..." 4MICA_RPC_URL="https://api.4mica.xyz/" node app.js
+env 4MICA_WALLET_PRIVATE_KEY="0x..." 4MICA_NETWORK="base-sepolia" node app.js
 ```
 
 Then in code:
