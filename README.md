@@ -27,19 +27,19 @@ Node.js 18+ is required.
 
 ## Networks
 
-| Shorthand | CAIP-2 | Core API URL |
-|---|---|---|
-| `ethereum-sepolia` | `eip155:11155111` | `https://ethereum.sepolia.4mica.xyz/` |
-| `base-sepolia` | `eip155:84532` | `https://base.sepolia.4mica.xyz/` |
+| Shorthand          | CAIP-2            | Core API URL                              |
+| ------------------ | ----------------- | ----------------------------------------- |
+| `ethereum-sepolia` | `eip155:11155111` | `https://ethereum.sepolia.api.4mica.xyz/` |
+| `base-sepolia`     | `eip155:84532`    | `https://base.sepolia.api.4mica.xyz/`     |
 
 The default network is Ethereum Sepolia. Use `.network()` or the `4MICA_NETWORK` environment
 variable to switch networks.
 
 ```ts
-import { NETWORKS } from "@4mica/sdk";
+import { NETWORKS } from '@4mica/sdk';
 
-console.log(NETWORKS["base-sepolia"].caip2);   // "eip155:84532"
-console.log(NETWORKS["base-sepolia"].rpcUrl);  // "https://base.sepolia.4mica.xyz/"
+console.log(NETWORKS['base-sepolia'].caip2); // "eip155:84532"
+console.log(NETWORKS['base-sepolia'].rpcUrl); // "https://base.sepolia.api.4mica.xyz/"
 ```
 
 ## Initialization and Configuration
@@ -63,12 +63,12 @@ The SDK requires a signing key and can use sensible defaults for the rest:
 ### 1) Using ConfigBuilder
 
 ```ts
-import { Client, ConfigBuilder } from "@4mica/sdk";
+import { Client, ConfigBuilder } from '@4mica/sdk';
 
 async function main() {
   const cfg = new ConfigBuilder()
-    .network("base-sepolia")   // or "ethereum-sepolia" (default)
-    .walletPrivateKey("0x...")
+    .network('base-sepolia') // or "ethereum-sepolia" (default)
+    .walletPrivateKey('0x...')
     .build();
 
   const client = await Client.new(cfg);
@@ -88,12 +88,12 @@ Set environment variables (example `.env`):
 4MICA_WALLET_PRIVATE_KEY="0x..."
 4MICA_NETWORK="base-sepolia"           # shorthand or CAIP-2 id
 # or override URL directly:
-# 4MICA_RPC_URL="https://base.sepolia.4mica.xyz/"
+# 4MICA_RPC_URL="https://base.sepolia.api.4mica.xyz/"
 4MICA_ETHEREUM_HTTP_RPC_URL="http://localhost:8545"
 4MICA_CONTRACT_ADDRESS="0x..."
 4MICA_ADMIN_API_KEY="ak_..."
 4MICA_BEARER_TOKEN="Bearer <access_token>"
-4MICA_AUTH_URL="https://ethereum.sepolia.4mica.xyz/"
+4MICA_AUTH_URL="https://ethereum.sepolia.api.4mica.xyz/"
 4MICA_AUTH_REFRESH_MARGIN_SECS="60"
 ```
 
@@ -107,7 +107,7 @@ env 4MICA_WALLET_PRIVATE_KEY="0x..." 4MICA_NETWORK="base-sepolia" node app.js
 Then in code:
 
 ```ts
-import { Client, ConfigBuilder } from "@4mica/sdk";
+import { Client, ConfigBuilder } from '@4mica/sdk';
 
 const cfg = new ConfigBuilder().fromEnv().build();
 const client = await Client.new(cfg);
@@ -120,8 +120,8 @@ If you want to integrate with a custom signer (hardware wallet, remote signer, e
 SIWE auth.
 
 ```ts
-import { Client, ConfigBuilder } from "@4mica/sdk";
-import { privateKeyToAccount } from "viem/accounts";
+import { Client, ConfigBuilder } from '@4mica/sdk';
+import { privateKeyToAccount } from 'viem/accounts';
 
 const signer = privateKeyToAccount(process.env.PAYER_KEY as `0x${string}`);
 const cfg = new ConfigBuilder().signer(signer).build();
@@ -133,11 +133,11 @@ const client = await Client.new(cfg);
 Enable automatic SIWE auth refresh, or pass a static bearer token:
 
 ```ts
-import { Client, ConfigBuilder } from "@4mica/sdk";
+import { Client, ConfigBuilder } from '@4mica/sdk';
 
 const cfg = new ConfigBuilder()
-  .walletPrivateKey("0x...")
-  .rpcUrl("https://api.4mica.xyz/")
+  .walletPrivateKey('0x...')
+  .rpcUrl('https://api.4mica.xyz/')
   .enableAuth()
   .build();
 
@@ -149,8 +149,8 @@ Or use a static token:
 
 ```ts
 const cfg = new ConfigBuilder()
-  .walletPrivateKey("0x...")
-  .bearerToken("Bearer <access_token>")
+  .walletPrivateKey('0x...')
+  .bearerToken('Bearer <access_token>')
   .build();
 ```
 
@@ -167,6 +167,7 @@ The SDK exposes three main entry points:
 ### End-to-end Example (Base Sepolia + x402 v2)
 
 See `examples/base-sepolia-x402-facilitator-e2e.ts` for a full flow in the `examples` folder:
+
 - deposit collateral
 - create/get a tab via facilitator
 - issue and verify V1 + V2 guarantees
@@ -189,6 +190,7 @@ X-PAYMENT header (and optional `/settle` call) that the facilitator will accept.
 #### What the SDK expects from `paymentRequirements`
 
 At minimum you need:
+
 - `scheme` and `network` (scheme must include `4mica`, e.g. `4mica-credit`)
 - `payTo` (recipient address), `asset`, and `maxAmountRequired` (v1) or `amount` (v2)
 - `extra.tabEndpoint` for tab resolution
@@ -200,8 +202,8 @@ At minimum you need:
 Version 1 returns payment requirements in the JSON response body:
 
 ```ts
-import { Client, ConfigBuilder, X402Flow } from "@4mica/sdk";
-import type { PaymentRequirementsV1 } from "@4mica/sdk";
+import { Client, ConfigBuilder, X402Flow } from '@4mica/sdk';
+import type { PaymentRequirementsV1 } from '@4mica/sdk';
 
 type ResourceResponse = {
   x402Version: number;
@@ -209,23 +211,23 @@ type ResourceResponse = {
   error?: string;
 };
 
-const cfg = new ConfigBuilder().walletPrivateKey("0x...").build();
+const cfg = new ConfigBuilder().walletPrivateKey('0x...').build();
 const client = await Client.new(cfg);
 const flow = X402Flow.fromClient(client);
 
 // 1) GET the protected endpoint and parse JSON body
-const res = await fetch("https://resource-url/resource");
+const res = await fetch('https://resource-url/resource');
 const body = (await res.json()) as ResourceResponse;
 
 // 2) Select a payment option
 const requirements = body.accepts[0];
 
 // 3) Build the X-PAYMENT header with the SDK
-const payment = await flow.signPayment(requirements, "0xUser");
+const payment = await flow.signPayment(requirements, '0xUser');
 
 // 4) Call the protected resource with the header
-await fetch("https://resource-url/resource", {
-  headers: { "X-PAYMENT": payment.header },
+await fetch('https://resource-url/resource', {
+  headers: { 'X-PAYMENT': payment.header },
 });
 
 await client.aclose();
@@ -236,31 +238,31 @@ await client.aclose();
 Version 2 uses the `payment-required` header (base64-encoded) instead of a JSON response body:
 
 ```ts
-import { Client, ConfigBuilder, X402Flow } from "@4mica/sdk";
-import type { X402PaymentRequired, PaymentRequirementsV2 } from "@4mica/sdk";
+import { Client, ConfigBuilder, X402Flow } from '@4mica/sdk';
+import type { X402PaymentRequired, PaymentRequirementsV2 } from '@4mica/sdk';
 
-const cfg = new ConfigBuilder().walletPrivateKey("0x...").build();
+const cfg = new ConfigBuilder().walletPrivateKey('0x...').build();
 const client = await Client.new(cfg);
 const flow = X402Flow.fromClient(client);
 
 // 1) GET the protected endpoint and extract payment-required header
-const res = await fetch("https://resource-url/resource");
-const header = res.headers.get("payment-required");
-if (!header) throw new Error("Missing payment-required header");
+const res = await fetch('https://resource-url/resource');
+const header = res.headers.get('payment-required');
+if (!header) throw new Error('Missing payment-required header');
 
 // 2) Decode the header
-const decoded = Buffer.from(header, "base64").toString("utf8");
+const decoded = Buffer.from(header, 'base64').toString('utf8');
 const paymentRequired = JSON.parse(decoded) as X402PaymentRequired;
 
 // 3) Select a payment option
 const accepted = paymentRequired.accepts[0] as PaymentRequirementsV2;
 
 // 4) Build the PAYMENT-SIGNATURE header with the SDK
-const signed = await flow.signPaymentV2(paymentRequired, accepted, "0xUser");
+const signed = await flow.signPaymentV2(paymentRequired, accepted, '0xUser');
 
 // 5) Call the protected resource with the header
-await fetch("https://resource-url/resource", {
-  headers: { "PAYMENT-SIGNATURE": signed.header },
+await fetch('https://resource-url/resource', {
+  headers: { 'PAYMENT-SIGNATURE': signed.header },
 });
 
 await client.aclose();
@@ -272,8 +274,8 @@ If your resource server proxies to the facilitator, you can reuse the SDK to set
 verifying:
 
 ```ts
-import { Client, ConfigBuilder, X402Flow } from "@4mica/sdk";
-import type { PaymentRequirementsV1, X402SignedPayment } from "@4mica/sdk";
+import { Client, ConfigBuilder, X402Flow } from '@4mica/sdk';
+import type { PaymentRequirementsV1, X402SignedPayment } from '@4mica/sdk';
 
 async function settle(
   facilitatorUrl: string,
@@ -286,13 +288,14 @@ async function settle(
   const flow = X402Flow.fromClient(core);
 
   const settled = await flow.settlePayment(payment, paymentRequirements, facilitatorUrl);
-  console.log("settlement result:", settled.settlement);
+  console.log('settlement result:', settled.settlement);
 
   await core.aclose();
 }
 ```
 
 Notes:
+
 - `signPayment` and `signPaymentV2` always use EIP-712 signing and will error if the scheme is not 4mica.
 - `UserClient.signPayment` supports `SigningScheme.EIP712` (default) and `SigningScheme.EIP191`.
 - `settlePayment` only hits `/settle`; resource servers should still call `/verify` first when enforcing access.
@@ -351,11 +354,17 @@ import {
   computeValidationSubjectHash,
   computeValidationRequestHash,
   SigningScheme,
-} from "@4mica/sdk";
+} from '@4mica/sdk';
 
 // 1) Build base V1 claims first
 const baseClaims = PaymentGuaranteeRequestClaims.new(
-  userAddress, recipientAddress, tabId, amount, timestamp, erc20Token, reqId
+  userAddress,
+  recipientAddress,
+  tabId,
+  amount,
+  timestamp,
+  erc20Token,
+  reqId
 );
 
 // 2) Compute canonical hashes
@@ -363,14 +372,14 @@ const validationSubjectHash = computeValidationSubjectHash(baseClaims);
 
 const partialV2 = new PaymentGuaranteeRequestClaimsV2({
   ...baseClaims,
-  validationRegistryAddress: "0x...",
-  validationRequestHash: "0x" + "00".repeat(32), // placeholder
+  validationRegistryAddress: '0x...',
+  validationRequestHash: '0x' + '00'.repeat(32), // placeholder
   validationChainId: 1,
-  validatorAddress: "0x...",
+  validatorAddress: '0x...',
   validatorAgentId: 1n,
-  minValidationScore: 80,  // 1–100
+  minValidationScore: 80, // 1–100
   validationSubjectHash,
-  requiredValidationTag: "my-tag",
+  requiredValidationTag: 'my-tag',
 });
 
 const validationRequestHash = computeValidationRequestHash(partialV2);
@@ -387,21 +396,25 @@ All SDK errors extend `FourMicaError`. Import individual error classes to distin
 
 ```ts
 import {
-  ConfigError,       // invalid ConfigBuilder input
-  RpcError,          // 4Mica core service error (has .status and .body)
-  SigningError,       // signing scheme unsupported or address mismatch
-  ContractError,      // on-chain call failed or unexpected result
-  VerificationError,  // BLS certificate decode/domain mismatch
-  X402Error,          // x402 flow error (bad scheme, tab resolution, settlement)
-  AuthError,          // base class for all auth errors
+  ConfigError, // invalid ConfigBuilder input
+  RpcError, // 4Mica core service error (has .status and .body)
+  SigningError, // signing scheme unsupported or address mismatch
+  ContractError, // on-chain call failed or unexpected result
+  VerificationError, // BLS certificate decode/domain mismatch
+  X402Error, // x402 flow error (bad scheme, tab resolution, settlement)
+  AuthError, // base class for all auth errors
   AuthMissingConfigError, // auth not configured when login() is called
-} from "@4mica/sdk";
+} from '@4mica/sdk';
 
 try {
   await client.recipient.remunerate(cert);
 } catch (err) {
-  if (err instanceof VerificationError) { /* bad cert */ }
-  if (err instanceof ContractError) { /* on-chain failure */ }
+  if (err instanceof VerificationError) {
+    /* bad cert */
+  }
+  if (err instanceof ContractError) {
+    /* on-chain failure */
+  }
 }
 ```
 

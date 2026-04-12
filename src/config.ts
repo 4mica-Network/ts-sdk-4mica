@@ -36,7 +36,7 @@ export interface Config {
  * All fields can also be supplied from environment variables via {@link fromEnv}.
  */
 export class ConfigBuilder {
-  private _rpcUrl: string | undefined = 'https://ethereum.sepolia.4mica.xyz/';
+  private _rpcUrl: string | undefined = 'https://ethereum.sepolia.api.4mica.xyz/';
   private _walletPrivateKey: string | undefined;
   private _signer: Account | undefined;
   private _ethereumHttpRpcUrl?: string;
@@ -47,7 +47,7 @@ export class ConfigBuilder {
   private _authUrl?: string;
   private _authRefreshMarginSecs?: number;
 
-  /** Set the 4Mica core RPC URL directly. Use {@link network} to select a hosted network by name instead. Defaults to `https://ethereum.sepolia.4mica.xyz/`. */
+  /** Set the 4Mica core RPC URL directly. Use {@link network} to select a hosted network by name instead. Defaults to `https://ethereum.sepolia.api.4mica.xyz/`. */
   rpcUrl(value: string): ConfigBuilder {
     this._rpcUrl = value;
     return this;

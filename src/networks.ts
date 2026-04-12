@@ -29,11 +29,11 @@ export interface NetworkInfo {
 export const NETWORKS: Record<string, NetworkInfo> = {
   'base-sepolia': {
     caip2: 'eip155:84532',
-    rpcUrl: 'https://base.sepolia.4mica.xyz/',
+    rpcUrl: 'https://base.sepolia.api.4mica.xyz/',
   },
   'ethereum-sepolia': {
     caip2: 'eip155:11155111',
-    rpcUrl: 'https://ethereum.sepolia.4mica.xyz/',
+    rpcUrl: 'https://ethereum.sepolia.api.4mica.xyz/',
   },
 } as const;
 
@@ -47,8 +47,8 @@ const NETWORKS_BY_CAIP2: Record<string, NetworkInfo> = Object.fromEntries(
  *
  * @example
  * ```ts
- * resolveNetworkRpcUrl("base-sepolia");   // "https://base.sepolia.4mica.xyz/"
- * resolveNetworkRpcUrl("eip155:84532");   // "https://base.sepolia.4mica.xyz/"
+ * resolveNetworkRpcUrl("base-sepolia");   // "https://base.sepolia.api.4mica.xyz/"
+ * resolveNetworkRpcUrl("eip155:84532");   // "https://base.sepolia.api.4mica.xyz/"
  * resolveNetworkRpcUrl("eip155:1");       // undefined
  * ```
  */
