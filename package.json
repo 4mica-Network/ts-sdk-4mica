@@ -1,6 +1,6 @@
 {
   "name": "@4mica/sdk",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "description": "TypeScript SDK for interacting with the 4Mica payment network",
   "license": "MIT",
   "repository": {
@@ -49,8 +49,8 @@
     "fmt": "prettier --check \"{src,tests}/**/*.{ts,js,json}\""
   },
   "dependencies": {
-    "@4mica/x402": "file:../x402-4mica/packages/typescript/x402",
-    "@noble/curves": "^2.0.1",
+    "@4mica/x402": "^1.2.0",
+    "@noble/curves": "^2.2.0",
     "@quillai-network/wachai-validation-sdk": "^0.1.0",
     "viem": "^2.45.1"
   },

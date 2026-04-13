@@ -16,6 +16,23 @@ import { getChain } from './chain';
 import { ContractError } from './errors';
 import { parseU256, hexFromBytes } from './utils';
 
+/**
+ * Extract a human-readable message from a viem contract error, falling back
+ * to the raw message if no structured reason is available.
+ */
+function wrapViemError(error: unknown, context: string): ContractError {
+  if (error instanceof ContractError) return error;
+  if (error instanceof Error) {
+    const e = error as unknown as Record<string, unknown>;
+    const reason =
+      (e['cause'] as Record<string, unknown> | undefined)?.['reason'] ??
+      e['shortMessage'] ??
+      error.message;
+    return new ContractError(`${context}: ${reason}`);
+  }
+  return new ContractError(`${context}: ${String(error)}`);
+}
+
 type TPublicClient = ReturnType<typeof createPublicClient>;
 type TWalletClient = ReturnType<typeof createWalletClient<HttpTransport, Chain, Account>>;
 
@@ -174,16 +191,37 @@ export class ContractGateway {
       return txReceipt;
     };
 
+    let txReceipt;
     try {
-      return await sendApprove(targetAllowance);
+      txReceipt = await sendApprove(targetAllowance);
     } catch (error) {
-      // Some ERC20s require resetting allowance to zero before setting a new value.
+      // Some ERC20s (e.g. USDT) require resetting allowance to zero before
+      // setting a new non-zero value.
       if (targetAllowance === 0n) {
-        throw error;
+        throw wrapViemError(error, 'ERC20 approve failed');
       }
-      await sendApprove(0n);
-      return sendApprove(targetAllowance);
+      try {
+        await sendApprove(0n);
+        txReceipt = await sendApprove(targetAllowance);
+      } catch (retryError) {
+        throw wrapViemError(retryError, 'ERC20 approve failed after allowance reset');
+      }
     }
+
+    // Verify the allowance was actually set on-chain. The catch path above can
+    // leave allowance at 0 if the re-approve transaction fails silently.
+    const account = this.walletClient.account;
+    if (account) {
+      const actual = await (erc20 as Erc20Contract).read.allowance([account.address, spender]);
+      if ((actual as bigint) < targetAllowance) {
+        throw new ContractError(
+          `ERC20 allowance verification failed: on-chain allowance is ${actual} but expected ${targetAllowance}. ` +
+            `Try calling approveErc20 again.`
+        );
+      }
+    }
+
+    return txReceipt;
   }
 
   async deposit(
@@ -192,19 +230,44 @@ export class ContractGateway {
     waitOptions?: TxReceiptWaitOptions
   ) {
     const { receipt } = this.splitWaitOptions(waitOptions);
+    const parsedAmount = parseU256(amount);
     let hash: Hex;
 
     if (erc20Token) {
-      hash = await this.enqueueTx(() =>
-        this.contract.write.depositStablecoin(
-          [erc20Token as Hex, parseU256(amount)],
-          this.defaultFeeParams()
-        )
-      );
+      // Pre-check allowance to surface a clear error before hitting the contract.
+      const account = this.walletClient.account;
+      if (account) {
+        const erc20 = this.erc20(erc20Token);
+        const allowance = await (erc20 as Erc20Contract).read.allowance([
+          account.address,
+          this.contract.address,
+        ]);
+        if ((allowance as bigint) < parsedAmount) {
+          throw new ContractError(
+            `Insufficient ERC20 allowance: ${allowance} approved but ${parsedAmount} required. ` +
+              `Call approveErc20("${erc20Token}", ${parsedAmount}) before depositing.`
+          );
+        }
+      }
+
+      try {
+        hash = await this.enqueueTx(() =>
+          this.contract.write.depositStablecoin(
+            [erc20Token as Hex, parsedAmount],
+            this.defaultFeeParams()
+          )
+        );
+      } catch (error) {
+        throw wrapViemError(error, 'depositStablecoin failed');
+      }
     } else {
-      hash = await this.enqueueTx(() =>
-        this.contract.write.deposit({ value: parseU256(amount), ...this.defaultFeeParams() })
-      );
+      try {
+        hash = await this.enqueueTx(() =>
+          this.contract.write.deposit({ value: parsedAmount, ...this.defaultFeeParams() })
+        );
+      } catch (error) {
+        throw wrapViemError(error, 'deposit failed');
+      }
     }
 
     return this.publicClient.waitForTransactionReceipt({ hash, ...receipt });
