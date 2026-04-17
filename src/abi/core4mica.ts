@@ -36,6 +36,11 @@ export const core4micaAbi = [
           },
         ],
       },
+      {
+        name: 'stablecoins_',
+        type: 'address[]',
+        internalType: 'address[]',
+      },
     ],
     stateMutability: 'nonpayable',
   },
@@ -90,6 +95,45 @@ export const core4micaAbi = [
   },
   {
     type: 'function',
+    name: 'MAX_YIELD_FEE_BPS',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'RECONCILIATION_DUST_TOLERANCE_SCALED',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'aaveAddressesProvider',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'contract IPoolAddressesProvider',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'authority',
     inputs: [],
     outputs: [
@@ -123,6 +167,52 @@ export const core4micaAbi = [
   },
   {
     type: 'function',
+    name: 'claimProtocolYield',
+    inputs: [
+      {
+        name: 'asset',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'to',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'amount',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'claimSurplusATokens',
+    inputs: [
+      {
+        name: 'asset',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'to',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'scaledAmount',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'collateral',
     inputs: [
       {
@@ -163,6 +253,24 @@ export const core4micaAbi = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'configureAave',
+    inputs: [
+      {
+        name: 'poolAddressesProvider',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'aTokens',
+        type: 'address[]',
+        internalType: 'address[]',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
   {
     type: 'function',
@@ -218,6 +326,25 @@ export const core4micaAbi = [
     ],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'contractScaledATokenBalance',
+    inputs: [
+      {
+        name: 'asset',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
   },
   {
     type: 'function',
@@ -338,7 +465,7 @@ export const core4micaAbi = [
     name: 'getPaymentStatus',
     inputs: [
       {
-        name: 'tab_id',
+        name: 'tabId',
         type: 'uint256',
         internalType: 'uint256',
       },
@@ -468,6 +595,54 @@ export const core4micaAbi = [
   },
   {
     type: 'function',
+    name: 'grossYield',
+    inputs: [
+      {
+        name: 'user',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'asset',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'guaranteeCapacity',
+    inputs: [
+      {
+        name: 'user',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'asset',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'guaranteeDomainSeparator',
     inputs: [],
     outputs: [
@@ -517,7 +692,7 @@ export const core4micaAbi = [
     name: 'payTabInERC20Token',
     inputs: [
       {
-        name: 'tab_id',
+        name: 'tabId',
         type: 'uint256',
         internalType: 'uint256',
       },
@@ -571,10 +746,90 @@ export const core4micaAbi = [
   },
   {
     type: 'function',
+    name: 'principalBalance',
+    inputs: [
+      {
+        name: 'user',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'asset',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'protocolScaledBalance',
+    inputs: [
+      {
+        name: 'asset',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'protocolYieldShare',
+    inputs: [
+      {
+        name: 'user',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'asset',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'reconciliationDustToleranceScaled',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
     name: 'recordPayment',
     inputs: [
       {
-        name: 'tab_id',
+        name: 'tabId',
         type: 'uint256',
         internalType: 'uint256',
       },
@@ -826,6 +1081,57 @@ export const core4micaAbi = [
   },
   {
     type: 'function',
+    name: 'setYieldFeeBps',
+    inputs: [
+      {
+        name: 'feeBps',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'stablecoinAToken',
+    inputs: [
+      {
+        name: 'asset',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'surplusScaledBalance',
+    inputs: [
+      {
+        name: 'asset',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'synchronizationDelay',
     inputs: [],
     outputs: [
@@ -852,10 +1158,53 @@ export const core4micaAbi = [
   },
   {
     type: 'function',
+    name: 'totalUserScaledBalance',
+    inputs: [
+      {
+        name: 'asset',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'unpause',
     inputs: [],
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'userNetYield',
+    inputs: [
+      {
+        name: 'user',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'asset',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
   },
   {
     type: 'function',
@@ -926,12 +1275,12 @@ export const core4micaAbi = [
             internalType: 'bytes32',
           },
           {
-            name: 'tab_id',
+            name: 'tabId',
             type: 'uint256',
             internalType: 'uint256',
           },
           {
-            name: 'req_id',
+            name: 'reqId',
             type: 'uint256',
             internalType: 'uint256',
           },
@@ -951,7 +1300,7 @@ export const core4micaAbi = [
             internalType: 'uint256',
           },
           {
-            name: 'total_amount',
+            name: 'totalAmount',
             type: 'uint256',
             internalType: 'uint256',
           },
@@ -971,6 +1320,30 @@ export const core4micaAbi = [
             internalType: 'uint64',
           },
         ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'withdrawableBalance',
+    inputs: [
+      {
+        name: 'user',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'asset',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
       },
     ],
     stateMutability: 'view',
@@ -1016,6 +1389,38 @@ export const core4micaAbi = [
       },
     ],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'yieldFeeBps',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'event',
+    name: 'AaveConfigured',
+    inputs: [
+      {
+        name: 'provider',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'pool',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+    ],
+    anonymous: false,
   },
   {
     type: 'event',
@@ -1157,7 +1562,7 @@ export const core4micaAbi = [
     name: 'PaymentRecorded',
     inputs: [
       {
-        name: 'tab_id',
+        name: 'tabId',
         type: 'uint256',
         indexed: true,
         internalType: 'uint256',
@@ -1179,10 +1584,35 @@ export const core4micaAbi = [
   },
   {
     type: 'event',
+    name: 'ProtocolYieldClaimed',
+    inputs: [
+      {
+        name: 'asset',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'to',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'amount',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
     name: 'RecipientRemunerated',
     inputs: [
       {
-        name: 'tab_id',
+        name: 'tabId',
         type: 'uint256',
         indexed: true,
         internalType: 'uint256',
@@ -1208,6 +1638,56 @@ export const core4micaAbi = [
     inputs: [
       {
         name: 'newGracePeriod',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'StablecoinAssetUpdated',
+    inputs: [
+      {
+        name: 'asset',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'enabled',
+        type: 'bool',
+        indexed: false,
+        internalType: 'bool',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'SurplusATokensClaimed',
+    inputs: [
+      {
+        name: 'asset',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'to',
+        type: 'address',
+        indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'scaledAmount',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+      {
+        name: 'nominalAmount',
         type: 'uint256',
         indexed: false,
         internalType: 'uint256',
@@ -1246,7 +1726,7 @@ export const core4micaAbi = [
     name: 'TabPaid',
     inputs: [
       {
-        name: 'tab_id',
+        name: 'tabId',
         type: 'uint256',
         indexed: true,
         internalType: 'uint256',
@@ -1261,6 +1741,12 @@ export const core4micaAbi = [
         name: 'user',
         type: 'address',
         indexed: true,
+        internalType: 'address',
+      },
+      {
+        name: 'recipient',
+        type: 'address',
+        indexed: false,
         internalType: 'address',
       },
       {
@@ -1384,6 +1870,35 @@ export const core4micaAbi = [
     anonymous: false,
   },
   {
+    type: 'event',
+    name: 'YieldFeeBpsUpdated',
+    inputs: [
+      {
+        name: 'oldFeeBps',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+      {
+        name: 'newFeeBps',
+        type: 'uint256',
+        indexed: false,
+        internalType: 'uint256',
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'error',
+    name: 'AaveNotConfigured',
+    inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'AaveProviderReconfigurationBlocked',
+    inputs: [],
+  },
+  {
     type: 'error',
     name: 'AccessManagedInvalidAuthority',
     inputs: [
@@ -1448,6 +1963,11 @@ export const core4micaAbi = [
   },
   {
     type: 'error',
+    name: 'FeeTooHigh',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'GracePeriodNotElapsed',
     inputs: [],
   },
@@ -1460,6 +1980,22 @@ export const core4micaAbi = [
     type: 'error',
     name: 'InsufficientAvailable',
     inputs: [],
+  },
+  {
+    type: 'error',
+    name: 'InvalidAToken',
+    inputs: [
+      {
+        name: 'asset',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'aToken',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
   },
   {
     type: 'error',
@@ -1505,6 +2041,27 @@ export const core4micaAbi = [
   },
   {
     type: 'error',
+    name: 'ReconciliationLoss',
+    inputs: [
+      {
+        name: 'asset',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'tracked',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'observed',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+  },
+  {
+    type: 'error',
     name: 'ReentrancyGuardReentrantCall',
     inputs: [],
   },
@@ -1518,6 +2075,32 @@ export const core4micaAbi = [
         internalType: 'address',
       },
     ],
+  },
+  {
+    type: 'error',
+    name: 'StablecoinWithdrawShortfall',
+    inputs: [
+      {
+        name: 'asset',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'requested',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'actual',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+  },
+  {
+    type: 'error',
+    name: 'SurplusClaimExceedsAvailable',
+    inputs: [],
   },
   {
     type: 'error',
@@ -1546,6 +2129,11 @@ export const core4micaAbi = [
   },
   {
     type: 'error',
+    name: 'TreasuryClaimExceedsAvailable',
+    inputs: [],
+  },
+  {
+    type: 'error',
     name: 'UnsupportedAsset',
     inputs: [
       {
@@ -1565,5 +2153,47 @@ export const core4micaAbi = [
         internalType: 'uint64',
       },
     ],
+  },
+  {
+    type: 'error',
+    name: 'UnsupportedTreasuryAsset',
+    inputs: [
+      {
+        name: 'asset',
+        type: 'address',
+        internalType: 'address',
+      },
+    ],
+  },
+  {
+    type: 'error',
+    name: 'UserScaledBalanceUnderflow',
+    inputs: [
+      {
+        name: 'asset',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'user',
+        type: 'address',
+        internalType: 'address',
+      },
+      {
+        name: 'deduction',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+      {
+        name: 'balance',
+        type: 'uint256',
+        internalType: 'uint256',
+      },
+    ],
+  },
+  {
+    type: 'error',
+    name: 'ZeroAddress',
+    inputs: [],
   },
 ] as const satisfies Abi;
