@@ -1,6 +1,6 @@
 {
   "name": "@4mica/sdk",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "TypeScript SDK for interacting with the 4Mica payment network",
   "license": "MIT",
   "repository": {
