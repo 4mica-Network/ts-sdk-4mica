@@ -59,8 +59,8 @@ export class UserClient {
    *   locked collateral and any pending withdrawal.
    * @throws {@link ContractError} if the contract call fails.
    */
-  async getUser(): Promise<UserInfo[]> {
-    const assets = await this.client.gateway.getUserAssets();
+  async getUser(opts?: { blockNumber?: bigint }): Promise<UserInfo[]> {
+    const assets = await this.client.gateway.getUserAssets(opts);
     return assets.map(
       (a) =>
         ({

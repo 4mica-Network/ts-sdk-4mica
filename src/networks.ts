@@ -18,15 +18,19 @@ export interface NetworkInfo {
  *
  * // By shorthand
  * const cfg = new ConfigBuilder()
- *   .network("base-sepolia")
+ *   .network("base")
  *   .walletPrivateKey("0x...")
  *   .build();
  *
  * // Inspect available networks
- * console.log(NETWORKS["base-sepolia"].caip2); // "eip155:84532"
+ * console.log(NETWORKS["base"].caip2); // "eip155:8453"
  * ```
  */
 export const NETWORKS: Record<string, NetworkInfo> = {
+  base: {
+    caip2: 'eip155:8453',
+    rpcUrl: 'https://base.api.4mica.xyz/',
+  },
   'base-sepolia': {
     caip2: 'eip155:84532',
     rpcUrl: 'https://base.sepolia.api.4mica.xyz/',
@@ -47,8 +51,8 @@ const NETWORKS_BY_CAIP2: Record<string, NetworkInfo> = Object.fromEntries(
  *
  * @example
  * ```ts
- * resolveNetworkRpcUrl("base-sepolia");   // "https://base.sepolia.api.4mica.xyz/"
- * resolveNetworkRpcUrl("eip155:84532");   // "https://base.sepolia.api.4mica.xyz/"
+ * resolveNetworkRpcUrl("base");           // "https://base.api.4mica.xyz/"
+ * resolveNetworkRpcUrl("eip155:8453");    // "https://base.api.4mica.xyz/"
  * resolveNetworkRpcUrl("eip155:1");       // undefined
  * ```
  */

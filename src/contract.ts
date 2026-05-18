@@ -210,10 +210,14 @@ export class ContractGateway {
 
     // Verify the allowance was actually set on-chain. The catch path above can
     // leave allowance at 0 if the re-approve transaction fails silently.
+    // Read at the confirmed block number so the result is consistent regardless
+    // of RPC node propagation lag.
     const account = this.walletClient.account;
     if (account) {
-      const actual = await (erc20 as Erc20Contract).read.allowance([account.address, spender]);
-      if ((actual as bigint) < targetAllowance) {
+      const actual = (await (erc20 as Erc20Contract).read.allowance([account.address, spender], {
+        blockNumber: txReceipt.blockNumber,
+      })) as bigint;
+      if (actual < targetAllowance) {
         throw new ContractError(
           `ERC20 allowance verification failed: on-chain allowance is ${actual} but expected ${targetAllowance}. ` +
             `Try calling approveErc20 again.`
@@ -273,13 +277,13 @@ export class ContractGateway {
     return this.publicClient.waitForTransactionReceipt({ hash, ...receipt });
   }
 
-  async getUserAssets() {
+  async getUserAssets(opts?: { blockNumber?: bigint }) {
     const account = this.walletClient.account;
     if (!account) {
       throw new ContractError('wallet client has no account configured');
     }
     const addr = account.address;
-    const result = await this.contract.read.getUserAllAssets([addr]);
+    const result = await this.contract.read.getUserAllAssets([addr], opts);
     return result.map((a) => ({
       asset: a.asset,
       collateral: a.collateral,
