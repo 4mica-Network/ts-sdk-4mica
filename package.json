@@ -1,6 +1,6 @@
 {
   "name": "@4mica/sdk",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "TypeScript SDK for interacting with the 4Mica payment network",
   "license": "MIT",
   "repository": {
@@ -45,6 +45,9 @@
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "example:base-sepolia:x402-v2": "node_modules/.bin/tsx examples/base-sepolia-x402-facilitator-e2e.ts",
     "example:manual:agents": "node_modules/.bin/tsx examples/manual-agents/demo.ts",
+    "example:wachai:v2": "node_modules/.bin/tsx examples/wachai-v2-demo/demo.ts",
+    "example:deposit": "node_modules/.bin/tsx examples/deposit.ts",
+    "example:yield": "node_modules/.bin/tsx examples/yield.ts",
     "lint": "eslint . --ext .ts",
     "fmt": "prettier --check \"{src,tests}/**/*.{ts,js,json}\""
   },

@@ -58,22 +58,22 @@ export class ConfigBuilder {
    * Resolves to the corresponding core API URL.
    * Mutually exclusive with {@link rpcUrl} — last call wins.
    *
-   * Supported values: `"base-sepolia"` / `"eip155:84532"`,
+   * Supported values: `"base"` / `"eip155:8453"`, `"base-sepolia"` / `"eip155:84532"`,
    * `"ethereum-sepolia"` / `"eip155:11155111"`.
    *
    * @throws {@link ConfigError} if the network is not recognised.
    *
    * @example
    * ```ts
-   * new ConfigBuilder().network("base-sepolia").walletPrivateKey("0x...").build();
-   * new ConfigBuilder().network("eip155:84532").walletPrivateKey("0x...").build();
+   * new ConfigBuilder().network("base").walletPrivateKey("0x...").build();
+   * new ConfigBuilder().network("eip155:8453").walletPrivateKey("0x...").build();
    * ```
    */
   network(value: string): ConfigBuilder {
     const url = resolveNetworkRpcUrl(value);
     if (!url) {
       throw new ConfigError(
-        `unknown network "${value}". Use a known shorthand (e.g. "base-sepolia") or CAIP-2 id, or call rpcUrl() directly.`
+        `unknown network "${value}". Use a known shorthand (e.g. "base") or CAIP-2 id, or call rpcUrl() directly.`
       );
     }
     this._rpcUrl = url;
@@ -140,7 +140,7 @@ export class ConfigBuilder {
    * Load configuration from environment variables.
    *
    * Recognised variables:
-   * - `4MICA_NETWORK` — shorthand or CAIP-2 id (e.g. `base-sepolia`); takes precedence over `4MICA_RPC_URL`
+   * - `4MICA_NETWORK` — shorthand or CAIP-2 id (e.g. `base`); takes precedence over `4MICA_RPC_URL`
    * - `4MICA_RPC_URL`
    * - `4MICA_WALLET_PRIVATE_KEY`
    * - `4MICA_ETHEREUM_HTTP_RPC_URL`
@@ -153,7 +153,7 @@ export class ConfigBuilder {
   fromEnv(): ConfigBuilder {
     const env = process.env;
     if (env['4MICA_NETWORK']) this.network(env['4MICA_NETWORK']);
-    if (env['4MICA_RPC_URL']) this._rpcUrl = env['4MICA_RPC_URL'];
+    else if (env['4MICA_RPC_URL']) this._rpcUrl = env['4MICA_RPC_URL'];
     if (env['4MICA_WALLET_PRIVATE_KEY']) this._walletPrivateKey = env['4MICA_WALLET_PRIVATE_KEY'];
     if (env['4MICA_ETHEREUM_HTTP_RPC_URL'])
       this._ethereumHttpRpcUrl = env['4MICA_ETHEREUM_HTTP_RPC_URL'];
