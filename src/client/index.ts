@@ -104,8 +104,8 @@ export class Client {
   ): Promise<ContractGateway> {
     const ethRpcUrl =
       cfg.ethereumHttpRpcUrl ??
-      resolvePublicRpcUrl(`eip155:${params.chainId}`) ??
-      params.ethereumHttpRpcUrl;
+      params.ethereumHttpRpcUrl ??
+      resolvePublicRpcUrl(`eip155:${params.chainId}`);
     const contractAddress = cfg.contractAddress ?? params.contractAddress;
     return ContractGateway.create(
       ethRpcUrl,

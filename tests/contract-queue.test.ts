@@ -21,7 +21,10 @@ function createGateway(opts?: {
   sendImpl?: () => Promise<string>;
 }): GatewayMocks {
   const publicClient = {
-    waitForTransactionReceipt: vi.fn(async ({ hash }: { hash: string }) => ({ hash })),
+    waitForTransactionReceipt: vi.fn(async ({ hash }: { hash: string }) => ({
+      hash,
+      status: 'success',
+    })),
   };
   const walletClient = {
     sendTransaction: vi.fn(opts?.sendImpl ?? (async () => '0xhash')),
@@ -128,5 +131,38 @@ describe('ContractGateway transaction queue', () => {
     expect(contract.write.remunerate.mock.calls[0]?.[1]).toMatchObject({
       gas: 8_000_000n,
     });
+  });
+
+  it('polls allowance verification after approve until RPC reads catch up', async () => {
+    const { gateway } = createGateway();
+    const token = '0x0000000000000000000000000000000000000002';
+    const approve = vi.fn(async () => '0xhash');
+    const allowance = vi
+      .fn()
+      .mockResolvedValueOnce(0n)
+      .mockResolvedValueOnce(0n)
+      .mockResolvedValueOnce(10_000n);
+
+    (
+      gateway as unknown as {
+        erc20Cache: Map<
+          string,
+          {
+            read: { allowance: ReturnType<typeof vi.fn> };
+            write: { approve: ReturnType<typeof vi.fn> };
+          }
+        >;
+      }
+    ).erc20Cache.set(token, {
+      read: { allowance },
+      write: { approve },
+    });
+
+    await expect(
+      gateway.approveErc20(token, 10_000n, { timeout: 100, pollingInterval: 1 })
+    ).resolves.toMatchObject({ hash: '0xhash', status: 'success' });
+
+    expect(approve).toHaveBeenCalledTimes(1);
+    expect(allowance).toHaveBeenCalledTimes(3);
   });
 });

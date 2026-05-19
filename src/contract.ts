@@ -62,6 +62,12 @@ const DEFAULT_REMUNERATE_GAS_LIMIT = 8_000_000n;
 const DEFAULT_PAY_TAB_ERC20_GAS_LIMIT = 300_000n;
 const DEFAULT_MAX_FEE_PER_GAS = parseGwei('0.1');
 const DEFAULT_MAX_PRIORITY_FEE_PER_GAS = parseGwei('0.1');
+const DEFAULT_RECEIPT_TIMEOUT_MS = 60_000;
+const DEFAULT_RECEIPT_POLLING_INTERVAL_MS = 2_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export class ContractGateway {
   readonly publicClient: TPublicClient;
@@ -147,7 +153,7 @@ export class ContractGateway {
     gas?: bigint;
   } {
     if (!waitOptions) {
-      return { receipt: { timeout: 60_000 } };
+      return { receipt: { timeout: DEFAULT_RECEIPT_TIMEOUT_MS } };
     }
     const { gas, timeout, pollingInterval } = waitOptions;
     return {
@@ -180,6 +186,17 @@ export class ContractGateway {
     const erc20 = this.erc20(token);
     const spender = this.contract.address;
     const targetAllowance = parseU256(amount);
+    const account = this.walletClient.account;
+
+    if (account) {
+      const currentAllowance = (await (erc20 as Erc20Contract).read.allowance([
+        account.address,
+        spender,
+      ])) as bigint;
+      if (currentAllowance >= targetAllowance) {
+        return undefined;
+      }
+    }
 
     const sendApprove = async (value: bigint) => {
       const hash = await this.enqueueTx(() =>
@@ -209,16 +226,14 @@ export class ContractGateway {
       }
     }
 
-    // Verify the allowance was actually set on-chain. The catch path above can
-    // leave allowance at 0 if the re-approve transaction fails silently.
-    // Read at "latest" — waitForTransactionReceipt already confirmed the block,
-    // and many public RPCs reject eth_call at a specific recent blockNumber.
-    const account = this.walletClient.account;
     if (account) {
-      const actual = (await (erc20 as Erc20Contract).read.allowance([
+      const actual = await this.waitForErc20Allowance(
+        erc20,
         account.address,
         spender,
-      ])) as bigint;
+        targetAllowance,
+        receipt
+      );
       if (actual < targetAllowance) {
         throw new ContractError(
           `ERC20 allowance verification failed: on-chain allowance is ${actual} but expected ${targetAllowance}. ` +
@@ -228,6 +243,30 @@ export class ContractGateway {
     }
 
     return txReceipt;
+  }
+
+  private async waitForErc20Allowance(
+    erc20: Erc20Contract,
+    owner: string,
+    spender: string,
+    targetAllowance: bigint,
+    receiptOptions: { timeout?: number; pollingInterval?: number }
+  ): Promise<bigint> {
+    const timeout = receiptOptions.timeout ?? DEFAULT_RECEIPT_TIMEOUT_MS;
+    const pollingInterval = receiptOptions.pollingInterval ?? DEFAULT_RECEIPT_POLLING_INTERVAL_MS;
+    const deadline = Date.now() + timeout;
+    let actual = 0n;
+
+    do {
+      actual = (await erc20.read.allowance([owner as Hex, spender as Hex])) as bigint;
+      if (actual >= targetAllowance) {
+        return actual;
+      }
+      if (Date.now() >= deadline) {
+        return actual;
+      }
+      await sleep(Math.min(pollingInterval, Math.max(0, deadline - Date.now())));
+    } while (true);
   }
 
   async deposit(

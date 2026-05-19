@@ -38,4 +38,4 @@ pnpm-debug.log*
 tmp/
 
 # Generated example artifacts
-examples/examples/
+examples/*
