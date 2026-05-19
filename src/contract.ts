@@ -25,11 +25,7 @@ function wrapViemError(error: unknown, context: string): ContractError {
   if (error instanceof Error) {
     const e = error as unknown as Record<string, unknown>;
     const cause = e['cause'] as Record<string, unknown> | undefined;
-    const reason =
-      cause?.['reason'] ??
-      cause?.['message'] ??
-      e['shortMessage'] ??
-      error.message;
+    const reason = cause?.['reason'] ?? cause?.['message'] ?? e['shortMessage'] ?? error.message;
     const details = e['details'] ?? cause?.['details'];
     const suffix = details ? ` (${details})` : '';
     return new ContractError(`${context}: ${reason}${suffix}`);
