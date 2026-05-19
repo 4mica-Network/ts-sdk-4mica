@@ -24,11 +24,15 @@ function wrapViemError(error: unknown, context: string): ContractError {
   if (error instanceof ContractError) return error;
   if (error instanceof Error) {
     const e = error as unknown as Record<string, unknown>;
+    const cause = e['cause'] as Record<string, unknown> | undefined;
     const reason =
-      (e['cause'] as Record<string, unknown> | undefined)?.['reason'] ??
+      cause?.['reason'] ??
+      cause?.['message'] ??
       e['shortMessage'] ??
       error.message;
-    return new ContractError(`${context}: ${reason}`);
+    const details = e['details'] ?? cause?.['details'];
+    const suffix = details ? ` (${details})` : '';
+    return new ContractError(`${context}: ${reason}${suffix}`);
   }
   return new ContractError(`${context}: ${String(error)}`);
 }
@@ -85,6 +89,7 @@ export class ContractGateway {
 
     const publicClient = createPublicClient({
       transport: http(rpcUrl),
+      pollingInterval: 2_000,
     });
 
     const rpcChainId = await publicClient.getChainId();
@@ -146,7 +151,7 @@ export class ContractGateway {
     gas?: bigint;
   } {
     if (!waitOptions) {
-      return { receipt: {} };
+      return { receipt: { timeout: 60_000 } };
     }
     const { gas, timeout, pollingInterval } = waitOptions;
     return {

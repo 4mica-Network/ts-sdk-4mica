@@ -5,6 +5,7 @@ import { ContractGateway } from '../contract';
 import { AuthMissingConfigError } from '../errors';
 import { RpcProxy } from '../rpc';
 import { CorePublicParameters } from '../models';
+import { resolvePublicRpcUrl } from '../networks';
 import { PaymentSigner } from '../signing';
 import { RecipientClient } from './recipient';
 import { UserClient } from './user';
@@ -101,7 +102,10 @@ export class Client {
     cfg: Config,
     params: CorePublicParameters
   ): Promise<ContractGateway> {
-    const ethRpcUrl = cfg.ethereumHttpRpcUrl ?? params.ethereumHttpRpcUrl;
+    const ethRpcUrl =
+      cfg.ethereumHttpRpcUrl ??
+      resolvePublicRpcUrl(`eip155:${params.chainId}`) ??
+      params.ethereumHttpRpcUrl;
     const contractAddress = cfg.contractAddress ?? params.contractAddress;
     return ContractGateway.create(
       ethRpcUrl,

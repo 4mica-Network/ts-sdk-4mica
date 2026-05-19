@@ -4,6 +4,8 @@ export interface NetworkInfo {
   caip2: string;
   /** Hosted 4Mica core API URL for this network. */
   rpcUrl: string;
+  /** Reliable public Ethereum RPC for on-chain calls (fallback when server doesn't provide one). */
+  publicRpcUrl: string;
 }
 
 /**
@@ -30,14 +32,17 @@ export const NETWORKS: Record<string, NetworkInfo> = {
   base: {
     caip2: 'eip155:8453',
     rpcUrl: 'https://base.api.4mica.xyz/',
+    publicRpcUrl: 'https://base-rpc.publicnode.com',
   },
   'base-sepolia': {
     caip2: 'eip155:84532',
     rpcUrl: 'https://base.sepolia.api.4mica.xyz/',
+    publicRpcUrl: 'https://base-sepolia-rpc.publicnode.com',
   },
   'ethereum-sepolia': {
     caip2: 'eip155:11155111',
     rpcUrl: 'https://ethereum.sepolia.api.4mica.xyz/',
+    publicRpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
   },
 } as const;
 
@@ -48,14 +53,15 @@ const NETWORKS_BY_CAIP2: Record<string, NetworkInfo> = Object.fromEntries(
 /**
  * Resolve a network shorthand or CAIP-2 identifier to a core API URL.
  * Returns `undefined` if the identifier is not a known hosted network.
- *
- * @example
- * ```ts
- * resolveNetworkRpcUrl("base");           // "https://base.api.4mica.xyz/"
- * resolveNetworkRpcUrl("eip155:8453");    // "https://base.api.4mica.xyz/"
- * resolveNetworkRpcUrl("eip155:1");       // undefined
- * ```
  */
 export function resolveNetworkRpcUrl(network: string): string | undefined {
   return NETWORKS[network]?.rpcUrl ?? NETWORKS_BY_CAIP2[network]?.rpcUrl;
+}
+
+/**
+ * Resolve a CAIP-2 identifier to a reliable public Ethereum RPC URL.
+ * Returns `undefined` for unknown networks.
+ */
+export function resolvePublicRpcUrl(caip2: string): string | undefined {
+  return NETWORKS_BY_CAIP2[caip2]?.publicRpcUrl;
 }
