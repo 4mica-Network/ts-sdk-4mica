@@ -257,16 +257,14 @@ export class ContractGateway {
     const deadline = Date.now() + timeout;
     let actual = 0n;
 
-    do {
+    while (Date.now() <= deadline) {
       actual = (await erc20.read.allowance([owner as Hex, spender as Hex])) as bigint;
       if (actual >= targetAllowance) {
         return actual;
       }
-      if (Date.now() >= deadline) {
-        return actual;
-      }
       await sleep(Math.min(pollingInterval, Math.max(0, deadline - Date.now())));
-    } while (true);
+    }
+    return actual;
   }
 
   async deposit(
