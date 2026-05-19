@@ -210,13 +210,14 @@ export class ContractGateway {
 
     // Verify the allowance was actually set on-chain. The catch path above can
     // leave allowance at 0 if the re-approve transaction fails silently.
-    // Read at the confirmed block number so the result is consistent regardless
-    // of RPC node propagation lag.
+    // Read at "latest" — waitForTransactionReceipt already confirmed the block,
+    // and many public RPCs reject eth_call at a specific recent blockNumber.
     const account = this.walletClient.account;
     if (account) {
-      const actual = (await (erc20 as Erc20Contract).read.allowance([account.address, spender], {
-        blockNumber: txReceipt.blockNumber,
-      })) as bigint;
+      const actual = (await (erc20 as Erc20Contract).read.allowance([
+        account.address,
+        spender,
+      ])) as bigint;
       if (actual < targetAllowance) {
         throw new ContractError(
           `ERC20 allowance verification failed: on-chain allowance is ${actual} but expected ${targetAllowance}. ` +
