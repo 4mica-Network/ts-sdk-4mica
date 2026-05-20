@@ -14,3 +14,4 @@ export * from './guarantee';
 export * from './bls';
 export * from './x402/index';
 export * from './client';
+export * from './wallet';
