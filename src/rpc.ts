@@ -8,6 +8,9 @@ import {
 } from './models';
 import { RpcError } from './errors';
 import { normalizeBaseUrl, requestJson, type FetchFn as HttpFetchFn } from './http';
+import { version } from '../package.json';
+
+const SDK_CLIENT_HEADER_VALUE = `ts-sdk-4mica/${version}`;
 
 export type FetchFn = HttpFetchFn;
 export type BearerTokenProvider = () => string | Promise<string>;
@@ -44,7 +47,7 @@ export class RpcProxy {
   }
 
   private async headers(): Promise<Record<string, string>> {
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { 'x-4mica-sdk': SDK_CLIENT_HEADER_VALUE };
     if (this.adminApiKey) {
       headers[ADMIN_API_KEY_HEADER] = this.adminApiKey;
     }
