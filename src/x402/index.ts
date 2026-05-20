@@ -152,9 +152,15 @@ export class X402Flow {
     userAddress: string
   ): Promise<X402SignedPayment> {
     X402Flow.validateScheme(accepted.scheme);
-    const tab = await this.requestTab(2, accepted, userAddress, paymentRequired.resource);
+    const isV2Claims = hasValidationPolicy(accepted.extra);
+    const tab = await this.requestTab(
+      isV2Claims ? 2 : 1,
+      accepted,
+      userAddress,
+      paymentRequired.resource
+    );
 
-    const claims = hasValidationPolicy(accepted.extra)
+    const claims = isV2Claims
       ? this.buildClaimsV2(accepted, tab, userAddress)
       : this.buildClaims(accepted, tab, userAddress);
 
