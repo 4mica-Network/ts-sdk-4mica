@@ -56,8 +56,12 @@
     "@quillai-network/wachai-validation-sdk": "^0.1.0",
     "viem": "^2.45.1"
   },
+  "optionalDependencies": {
+    "@coinbase/cdp-sdk": "^1.49.2"
+  },
   "devDependencies": {
-    "@4mica/x402": "^1.2.0",
+    "@4mica/x402": "^1.2.5",
+    "@coinbase/cdp-sdk": "^1.49.2",
     "@eslint/js": "^9.39.2",
     "@types/node": "^25.2.0",
     "@typescript-eslint/eslint-plugin": "^8.54.0",
