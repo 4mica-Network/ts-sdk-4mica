@@ -3,12 +3,13 @@ import {
   PaymentGuaranteeRequestClaimsV2,
   PaymentSignature,
   SigningScheme,
+  TabInfo,
   TabPaymentStatus,
   UserInfo,
 } from '../models';
 import { tabStatusFromRpc } from './shared';
 import type { TxReceiptWaitOptions } from '../contract';
-import { parseU256 } from '../utils';
+import { normalizeAddress, parseU256 } from '../utils';
 import type { Client } from './index';
 
 /** Payer-side operations: collateral management, payment signing, withdrawals. */
@@ -104,9 +105,31 @@ export class UserClient {
   }
 
   /**
-   * Pay a tab by transferring collateral to the recipient.
+   * List all tabs where the current signer is the payer.
    *
-   * Routes to `payTabErc20` when `erc20Token` is provided, otherwise `payTabEth`.
+   * @param recipientAddress - Address of the recipient to query tabs from.
+   * @returns Array of tabs belonging to the current signer.
+   */
+  async listTabs(recipientAddress: string): Promise<TabInfo[]> {
+    const myAddress = normalizeAddress(this.client.signer.signer.address);
+    const raw = await this.client.rpc.listRecipientTabs(recipientAddress);
+    return raw
+      .map((t) => TabInfo.fromRpc(t))
+      .filter((t) => normalizeAddress(t.userAddress) === myAddress);
+  }
+
+  /**
+   * Pay a tab on-chain. Automatically resolves the recipient, asset, and amount
+   * from the tab and its latest guarantee.
+   *
+   * @param tabId - Tab identifier.
+   * @param waitOptions - Optional timeout/polling overrides.
+   * @throws if the tab is not found or has no guarantee.
+   */
+  async payTab(tabId: number | bigint, waitOptions?: TxReceiptWaitOptions): Promise<unknown>;
+
+  /**
+   * Pay a tab on-chain with explicit parameters.
    *
    * @param tabId - Tab identifier.
    * @param reqId - Request ID from the latest guarantee (used for ETH payment memo).
@@ -122,17 +145,58 @@ export class UserClient {
     recipientAddress: string,
     erc20Token?: string,
     waitOptions?: TxReceiptWaitOptions
+  ): Promise<unknown>;
+
+  async payTab(
+    tabId: number | bigint,
+    reqIdOrWaitOptions?: number | bigint | TxReceiptWaitOptions,
+    amount?: number | bigint | string,
+    recipientAddress?: string,
+    erc20Token?: string,
+    waitOptions?: TxReceiptWaitOptions
   ) {
+    // Simple overload: auto-resolve from tab + latest guarantee
+    if (
+      reqIdOrWaitOptions === undefined ||
+      (typeof reqIdOrWaitOptions === 'object' &&
+        reqIdOrWaitOptions !== null &&
+        !('valueOf' in reqIdOrWaitOptions && typeof reqIdOrWaitOptions.valueOf() === 'bigint'))
+    ) {
+      const opts = reqIdOrWaitOptions as TxReceiptWaitOptions | undefined;
+      const tab = await this.client.recipient.getTab(tabId);
+      if (!tab) throw new Error(`Tab ${tabId} not found`);
+      const guarantee = await this.client.recipient.getLatestGuarantee(tabId);
+      if (!guarantee) throw new Error(`Tab ${tabId} has no guarantee`);
+      const isEth = tab.assetAddress === '0x0000000000000000000000000000000000000000';
+      return isEth
+        ? this.client.gateway.payTabEth(
+            tabId,
+            guarantee.reqId,
+            guarantee.amount,
+            tab.recipientAddress,
+            opts
+          )
+        : this.client.gateway.payTabErc20(
+            tabId,
+            guarantee.amount,
+            tab.assetAddress,
+            tab.recipientAddress,
+            opts
+          );
+    }
+
+    // Explicit overload
+    const reqId = reqIdOrWaitOptions as number | bigint;
     if (erc20Token) {
       return this.client.gateway.payTabErc20(
         tabId,
-        amount,
+        amount!,
         erc20Token,
-        recipientAddress,
+        recipientAddress!,
         waitOptions
       );
     }
-    return this.client.gateway.payTabEth(tabId, reqId, amount, recipientAddress, waitOptions);
+    return this.client.gateway.payTabEth(tabId, reqId, amount!, recipientAddress!, waitOptions);
   }
 
   /**

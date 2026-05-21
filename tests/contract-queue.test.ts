@@ -14,6 +14,10 @@ type GatewayMocks = {
       remunerate: ReturnType<typeof vi.fn>;
     };
   };
+  erc20: {
+    read: { allowance: ReturnType<typeof vi.fn> };
+    write: { approve: ReturnType<typeof vi.fn> };
+  };
 };
 
 function createGateway(opts?: {
@@ -37,6 +41,10 @@ function createGateway(opts?: {
       remunerate: vi.fn(opts?.writeImpl ?? (async () => '0xhash')),
     },
   };
+  const erc20 = {
+    read: { allowance: vi.fn(async () => 2n ** 256n - 1n) },
+    write: { approve: vi.fn(async () => '0xhash') },
+  };
 
   const GatewayCtor = ContractGateway as unknown as new (
     publicClient: {
@@ -52,7 +60,12 @@ function createGateway(opts?: {
     }
   ) => ContractGateway;
   const gateway = new GatewayCtor(publicClient, walletClient, contract);
-  return { gateway, publicClient, walletClient, contract };
+  (
+    gateway as unknown as {
+      erc20Cache: Map<string, typeof erc20>;
+    }
+  ).erc20Cache.set(DUMMY_ADDRESS, erc20);
+  return { gateway, publicClient, walletClient, contract, erc20 };
 }
 
 describe('ContractGateway transaction queue', () => {

@@ -377,9 +377,15 @@ export class ContractGateway {
     waitOptions?: TxReceiptWaitOptions
   ) {
     const { gas, receipt } = this.splitWaitOptions(waitOptions);
+    const parsedAmount = parseU256(amount);
+
+    // payTabInERC20Token uses safeTransferFrom, so the contract must be an
+    // approved spender. Auto-approve if the current allowance is insufficient.
+    await this.approveErc20(erc20Token, parsedAmount, waitOptions);
+
     const hash = await this.enqueueTx(() =>
       this.contract.write.payTabInERC20Token(
-        [parseU256(tabId), erc20Token as Hex, parseU256(amount), recipient as Hex],
+        [parseU256(tabId), erc20Token as Hex, parsedAmount, recipient as Hex],
         {
           gas: gas ?? DEFAULT_PAY_TAB_ERC20_GAS_LIMIT,
           ...this.defaultFeeParams(),
