@@ -316,6 +316,13 @@ Notes:
 - `cancelWithdrawal(erc20Token?)`
 - `finalizeWithdrawal(erc20Token?)`
 
+ERC20 approval behavior:
+
+- `deposit(amount, erc20Token)` requires a prior `approveErc20(token, amount)` call.
+- `payTab(...)` auto-approves the Core4Mica contract when paying an ERC20 tab and the current
+  allowance is below the payment amount.
+- `approveErc20` returns `undefined` when the existing allowance is already sufficient.
+
 #### RecipientClient Methods
 
 - `createTab(userAddress, recipientAddress, erc20Token?, ttl?, guaranteeVersion?)`
