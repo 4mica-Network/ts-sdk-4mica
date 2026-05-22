@@ -18,6 +18,8 @@ export interface CdpAccountConfig {
   apiKeyId: string;
   /** CDP API key secret from the Coinbase Developer Platform dashboard. */
   apiKeySecret: string;
+  /** CDP wallet secret — required for account creation/signing operations. */
+  walletSecret: string;
   /** Idempotency name — getOrCreateAccount always returns the same wallet for a given name. */
   name: string;
 }
@@ -29,6 +31,7 @@ export async function createCdpAccount(config: CdpAccountConfig): Promise<Accoun
   const cdp = new CdpClient({
     apiKeyId: config.apiKeyId,
     apiKeySecret: config.apiKeySecret,
+    walletSecret: config.walletSecret,
   });
 
   const evmAccount = await cdp.evm.getOrCreateAccount({ name: config.name });
@@ -46,17 +49,10 @@ export async function createCdpAccount(config: CdpAccountConfig): Promise<Accoun
   }
 
   async function signTypedData(parameters: TypedDataDefinition): Promise<Hex> {
-    const { domain, types, primaryType, message } = parameters;
-    if (domain && types && primaryType && message) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const payload = { address, domain, types, primaryType, message } as any;
-        const result = await cdp.evm.signTypedData(payload);
-        return result.signature as Hex;
-      } catch {
-        // Fall back to hash-then-sign if CDP rejects the typed-data structure.
-      }
-    }
+    // Always hash locally with viem (guaranteed correct EIP-712 encoding including
+    // non-standard types like uint64) and sign only the hash via CDP.
+    // CDP's native signTypedData can silently produce a wrong hash for custom types,
+    // which would pass without error but fail signature verification on the core side.
     const hash = hashTypedData(parameters);
     const result = await cdp.evm.signHash({ address, hash });
     return result.signature as Hex;
