@@ -156,6 +156,18 @@ export class RpcProxy {
     return this.get<Record<string, unknown>[]>(`/core/recipients/${recipientAddress}/tabs${query}`);
   }
 
+  async listUserTabs(
+    userAddress: string,
+    settlementStatuses?: string[]
+  ): Promise<Record<string, unknown>[]> {
+    let query = '';
+    if (settlementStatuses?.length) {
+      query =
+        '?' + settlementStatuses.map((s) => `settlement_status=${encodeURIComponent(s)}`).join('&');
+    }
+    return this.get<Record<string, unknown>[]>(`/core/users/${userAddress}/tabs${query}`);
+  }
+
   async getTabGuarantees(tabId: number | bigint): Promise<Record<string, unknown>[]> {
     return this.get<Record<string, unknown>[]>(`/core/tabs/${serializeTabId(tabId)}/guarantees`);
   }

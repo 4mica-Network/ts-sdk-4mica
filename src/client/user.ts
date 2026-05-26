@@ -107,15 +107,13 @@ export class UserClient {
   /**
    * List all tabs where the current signer is the payer.
    *
-   * @param recipientAddress - Address of the recipient to query tabs from.
+   * @param settlementStatuses - Optional filter on settlement status (e.g. `['pending']`).
    * @returns Array of tabs belonging to the current signer.
    */
-  async listTabs(recipientAddress: string): Promise<TabInfo[]> {
+  async listTabs(settlementStatuses?: string[]): Promise<TabInfo[]> {
     const myAddress = normalizeAddress(this.client.signer.signer.address);
-    const raw = await this.client.rpc.listRecipientTabs(recipientAddress);
-    return raw
-      .map((t) => TabInfo.fromRpc(t))
-      .filter((t) => normalizeAddress(t.userAddress) === myAddress);
+    const raw = await this.client.rpc.listUserTabs(myAddress, settlementStatuses);
+    return raw.map((t) => TabInfo.fromRpc(t));
   }
 
   /**
