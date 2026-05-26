@@ -117,8 +117,8 @@ export class UserClient {
   }
 
   /**
-   * Pay a tab on-chain. Automatically resolves the recipient, asset, and amount
-   * from the tab and its latest guarantee.
+   * Pay the remaining tab balance on-chain. Automatically resolves the recipient,
+   * asset, and remaining amount from the tab and its latest guarantee.
    *
    * @param tabId - Tab identifier.
    * @param waitOptions - Optional timeout/polling overrides.
@@ -165,18 +165,22 @@ export class UserClient {
       if (!tab) throw new Error(`Tab ${tabId} not found`);
       const guarantee = await this.client.recipient.getLatestGuarantee(tabId);
       if (!guarantee) throw new Error(`Tab ${tabId} has no guarantee`);
+      const remaining = tab.totalAmount > tab.paidAmount ? tab.totalAmount - tab.paidAmount : 0n;
+      if (remaining === 0n) {
+        throw new Error(`Tab ${tabId} is already fully paid`);
+      }
       const isEth = tab.assetAddress === '0x0000000000000000000000000000000000000000';
       return isEth
         ? this.client.gateway.payTabEth(
             tabId,
             guarantee.reqId,
-            guarantee.amount,
+            remaining,
             tab.recipientAddress,
             opts
           )
         : this.client.gateway.payTabErc20(
             tabId,
-            guarantee.amount,
+            remaining,
             tab.assetAddress,
             tab.recipientAddress,
             opts

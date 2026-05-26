@@ -161,6 +161,32 @@ describe('credit-flow coverage', () => {
     expect(payTabEth).toHaveBeenCalledWith(1n, 2n, 3n, RECIPIENT, undefined);
   });
 
+  it('pays the remaining tab amount in the simple overload', async () => {
+    const payTabEth = vi.fn();
+    const payTabErc20 = vi.fn();
+    const gateway = { payTabEth, payTabErc20 } as unknown as ContractGateway;
+    const recipient = {
+      getTab: vi.fn().mockResolvedValue({
+        tabId: 1n,
+        recipientAddress: RECIPIENT,
+        assetAddress: ASSET,
+        totalAmount: 30n,
+        paidAmount: 10n,
+      }),
+      getLatestGuarantee: vi.fn().mockResolvedValue({
+        reqId: 4n,
+        amount: 5n,
+      }),
+    } as unknown as Client['recipient'];
+    const client = buildClientStub({ gateway, recipient });
+    const user = new UserClient(client);
+
+    await user.payTab(1n);
+
+    expect(payTabErc20).toHaveBeenCalledWith(1n, 20n, ASSET, RECIPIENT, undefined);
+    expect(payTabEth).not.toHaveBeenCalled();
+  });
+
   it('creates tabs and normalizes ids', async () => {
     const createPaymentTab = vi.fn().mockResolvedValue({
       id: '0x10',

@@ -269,7 +269,9 @@ export class TabInfo {
     public status: string,
     public settlementStatus: string,
     public createdAt: number,
-    public updatedAt: number
+    public updatedAt: number,
+    public totalAmount: bigint = 0n,
+    public paidAmount: bigint = 0n
   ) {}
 
   static fromRpc(raw: Record<string, unknown>): TabInfo {
@@ -283,7 +285,9 @@ export class TabInfo {
       (getAny(raw, 'status') ?? '') as string,
       (getAny(raw, 'settlement_status', 'settlementStatus') ?? '') as string,
       Number(getAny(raw, 'created_at', 'createdAt')),
-      Number(getAny(raw, 'updated_at', 'updatedAt'))
+      Number(getAny(raw, 'updated_at', 'updatedAt')),
+      parseU256((getAny(raw, 'total_amount', 'totalAmount') ?? 0) as number | bigint | string),
+      parseU256((getAny(raw, 'paid_amount', 'paidAmount') ?? 0) as number | bigint | string)
     );
   }
 }
